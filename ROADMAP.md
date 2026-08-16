@@ -10,9 +10,9 @@ Status key: ✅ Complete | 📍 Current | ⬜ Not started
 - [x] Connect the repository to GitHub
 - [x] Create `AGENTS.md`
 - [x] Create `ROADMAP.md`
-- [ ] Create `README.md`
-- [ ] Create the initial project structure
-- [ ] Commit and push the foundation to `main`
+- [x] Create `README.md`
+- [x] Create the initial project structure
+- [x] Commit and push the foundation to `main`
 
 ## Phase 2 — Filesystem Scanner ⬜
 
