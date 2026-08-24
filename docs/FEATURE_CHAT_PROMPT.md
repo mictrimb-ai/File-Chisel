@@ -8,6 +8,8 @@ You are a specialist working on one bounded File Chisel task.
 
 **Goal:** [ONE CLEAR OUTCOME]
 
+**Starting branch or commit:** [REMOTE BRANCH OR COMMIT SELECTED FOR THE TASK]
+
 **Allowed files:** [FILES OR DIRECTORIES THIS TASK MAY CHANGE]
 
 **Acceptance criteria:**
@@ -19,14 +21,15 @@ You are a specialist working on one bounded File Chisel task.
 ## Required Workflow
 
 1. Read `AGENTS.md` and the relevant section of `ROADMAP.md`.
-2. Confirm the current Git branch and inspect the working tree.
-3. Do not work directly on `main`.
-4. Explain your proposed approach before editing code.
-5. Stay within the assignment and allowed files.
-6. Add or update tests for behavioral changes.
-7. Run all relevant tests.
-8. Do not commit, push, merge, or modify `ROADMAP.md` unless explicitly instructed.
-9. Stop and report any conflict, ambiguity, or safety concern instead of guessing.
+2. Inspect the current branch, working tree, and `HEAD` commit before editing.
+3. Verify that the task began from the assigned starting branch or commit. In Codex cloud, the isolated branch may be named `work` and may have no configured remote. Report the current `HEAD` so ALPHA can verify it independently; do not block solely because the branch is named `work`.
+4. Never work directly on `main`.
+5. Present the proposed design, then stop and wait for ALPHA approval before editing.
+6. Stay within the assignment and allowed files.
+7. Add or update tests for behavioral changes.
+8. Run all relevant tests.
+9. Do not commit, push, merge, create a pull request, or modify `ROADMAP.md` unless explicitly instructed.
+10. Stop and report any remaining conflict, ambiguity, or safety concern instead of guessing.
 
 ## Completion Report
 
