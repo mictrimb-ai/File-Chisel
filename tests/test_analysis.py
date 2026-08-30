@@ -52,6 +52,12 @@ class FilenameNormalizationTests(unittest.TestCase):
         self.assertEqual(normalize_filename("Report copy (2).TXT"), "report copy.txt")
         self.assertEqual(normalize_filename("Report copy.PDF"), "report.pdf")
 
+    def test_normalizes_canonically_equivalent_unicode_names(self):
+        expected = "caf\u00e9.txt"
+
+        self.assertEqual(normalize_filename("Caf\u00e9.txt"), expected)
+        self.assertEqual(normalize_filename("Cafe\u0301 (1).txt"), expected)
+
 
 class InventoryAnalysisTests(unittest.TestCase):
     def test_finds_only_direct_child_free_directories(self):

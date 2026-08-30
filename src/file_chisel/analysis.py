@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from pathlib import PurePath
 from typing import Iterable, Tuple
@@ -29,7 +30,7 @@ def normalize_filename(filename: str) -> str:
     a nonempty base.  The final extension remains part of the result.
     """
 
-    casefolded = filename.casefold()
+    casefolded = unicodedata.normalize("NFC", filename.casefold())
     extension = PurePath(casefolded).suffix
     stem = casefolded[: -len(extension)] if extension else casefolded
     match = _COPY_SUFFIX.search(stem)
