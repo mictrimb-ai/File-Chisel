@@ -2,7 +2,7 @@
 
 Status key: ✅ Complete | 📍 Current | ⬜ Not started
 
-## Phase 1 — Project Foundation 📍
+## Phase 1 — Project Foundation ✅
 
 - [x] Define the project purpose and first-version scope
 - [x] Establish non-negotiable safety rules
@@ -14,13 +14,13 @@ Status key: ✅ Complete | 📍 Current | ⬜ Not started
 - [x] Create the initial project structure
 - [x] Commit and push the foundation to `main`
 
-## Phase 2 — Filesystem Scanner ⬜
+## Phase 2 — Filesystem Scanner 📍
 
 - [ ] Let the user select Documents, Downloads, and Desktop
-- [ ] Recursively scan files and folders
-- [ ] Collect metadata without reading file contents
+- [x] Recursively scan files and folders
+- [x] Collect metadata without reading file contents
 - [ ] Detect empty folders and likely duplicate files
-- [ ] Add scanner tests
+- [x] Add scanner tests
 
 ## Phase 3 — Inventory and Visualization ⬜
 
