@@ -19,7 +19,7 @@ Status key: ✅ Complete | 📍 Current | ⬜ Not started
 - [ ] Let the user select Documents, Downloads, and Desktop
 - [x] Recursively scan files and folders
 - [x] Collect metadata without reading file contents
-- [ ] Detect empty folders and likely duplicate files
+- [x] Detect empty folders and likely duplicate files
 - [x] Add scanner tests
 
 ## Phase 3 — Inventory and Visualization ⬜

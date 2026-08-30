@@ -25,3 +25,10 @@ File Chisel is a local macOS application that helps a user safely reorganize the
 7. Run the relevant tests before declaring work complete.
 8. Summarize all changed files, test results, and unresolved risks.
 9. Do not merge a feature branch into `main`; leave that decision for review.
+
+## Pull Request Integration
+
+1. Open or mark a pull request ready only after local validation passes.
+2. Wait for all requested automated and human reviews to finish before merging.
+3. Resolve or explicitly document every actionable review finding.
+4. After merging, synchronize local `main` and rerun relevant tests before deleting branches.
