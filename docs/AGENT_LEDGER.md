@@ -62,3 +62,18 @@ Status key: 📍 Active | ✅ Complete | ⛔ Blocked
 - Review: the Codex reviewer returned a thumbs-up with no posted findings before merging.
 - Observation: a brief window-position snap was reported at scan completion while moving the window; cause unconfirmed, with no reported error or loss of responsiveness.
 - Result: merged into `main`; feature branch deleted locally and on GitHub; Phase 2 complete.
+
+### ALPHA — Structured Scan Inventory
+
+- Starting branch: `feature/structured-inventory`
+- Starting commit: `a6633ad`
+- Design contribution: Parker defined the acceptance example containing four successful entries, one failed root, one empty directory, and one likely-duplicate group.
+- Implementation: ALPHA added an immutable inventory snapshot built inside the background worker and retained by the application controller.
+- Changed files: `src/file_chisel/app.py`, `src/file_chisel/folder_selection.py`, `src/file_chisel/inventory.py`, `tests/test_app.py`, `tests/test_folder_selection.py`, `tests/test_inventory.py`
+- Implementation workspace commit: `a58338a` (shell publishing was unavailable)
+- Published feature commit: `ea65d5f` (identical source tree)
+- Merge commit: `73c4ca3`
+- Pull request: [#8 — Add structured scan inventory](https://github.com/mictrimb-ai/File-Chisel/pull/8)
+- Validation: 50 tests passed in the implementation workspace, on the feature branch locally, and again on merged `main`.
+- Review: the Codex reviewer returned a thumbs-up with no posted findings before merging.
+- Result: merged into `main`; feature branch deleted locally and on GitHub; the first Phase 3 roadmap item is complete.
