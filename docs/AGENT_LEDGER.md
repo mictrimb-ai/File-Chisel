@@ -11,6 +11,7 @@ Status key: 📍 Active | ✅ Complete | ⛔ Blocked
 | ALPHA | Coordinator and reviewer | Maintain roadmap, assign bounded work, and approve integration | 📍 Active | Command center |
 | BRAVO | Feature specialist | Build the core read-only filesystem scanner | ✅ Complete | PR #1 merged into `main` |
 | CHARLIE | Feature specialist | Build metadata-only inventory analysis | ✅ Complete | PR #3 and follow-up PR #4 merged into `main` |
+| DELTA | Feature specialist | Design the folder-selection interface | ✅ Complete | Design implemented by ALPHA in PR #6 |
 
 ## Completed Handoffs
 
@@ -43,3 +44,21 @@ Status key: 📍 Active | ✅ Complete | ⛔ Blocked
 - Fix pull request: [#4 — Normalize Unicode filenames before duplicate comparison](https://github.com/mictrimb-ai/File-Chisel/pull/4)
 - Final validation: the regression test failed before the fix and passed afterward; 11 analysis tests and 21 total tests passed on merged `main`; the Codex review completed cleanly
 - Result: completed successfully on August 30, 2026; temporary branches deleted
+
+### DELTA / ALPHA — Folder Selection
+
+- Starting branch: `feature/folder-selection`
+- Starting commit: `fddb1e1`
+- Design: DELTA proposed the approved folder-selection interface and scan coordination.
+- Implementation: ALPHA implemented the feature after DELTA reported that its mandatory `make_pr` tool was unavailable. DELTA made no code changes.
+- Changed files: `src/file_chisel/app.py`, `src/file_chisel/folder_selection.py`, `tests/test_app.py`, `tests/test_folder_selection.py`
+- Feature commit: `bd064b8`
+- Merge commit: `1e2e8d3`
+- Pull request: [#6 — Add folder selection interface](https://github.com/mictrimb-ai/File-Chisel/pull/6)
+- Automated validation: 26 new tests and 47 total tests passed in the implementation workspace and locally; all 47 passed again on merged `main`.
+- Local runtime: Python 3.14.7 with Tcl/Tk 9.0.4.
+- Manual validation: unchecked startup, checkbox behavior, successful scanning, clearing outdated results, disabled controls during scanning, and window responsiveness.
+- Failure and shutdown validation: temporary folders produced the expected partial result; closing both idle and actively scanning windows returned cleanly to the terminal.
+- Review: the Codex reviewer returned a thumbs-up with no posted findings before merging.
+- Observation: a brief window-position snap was reported at scan completion while moving the window; cause unconfirmed, with no reported error or loss of responsiveness.
+- Result: merged into `main`; feature branch deleted locally and on GitHub; Phase 2 complete.

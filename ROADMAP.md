@@ -14,15 +14,15 @@ Status key: ✅ Complete | 📍 Current | ⬜ Not started
 - [x] Create the initial project structure
 - [x] Commit and push the foundation to `main`
 
-## Phase 2 — Filesystem Scanner 📍
+## Phase 2 — Filesystem Scanner ✅
 
-- [ ] Let the user select Documents, Downloads, and Desktop
+- [x] Let the user select Documents, Downloads, and Desktop
 - [x] Recursively scan files and folders
 - [x] Collect metadata without reading file contents
 - [x] Detect empty folders and likely duplicate files
 - [x] Add scanner tests
 
-## Phase 3 — Inventory and Visualization ⬜
+## Phase 3 — Inventory and Visualization 📍
 
 - [ ] Store each scan as a structured inventory
 - [ ] Display the current folder hierarchy
