@@ -205,6 +205,8 @@ class FolderScanRunnerTests(unittest.TestCase):
             runner.start(["downloads"])
         completion = runner.poll_completion()
         self.assertEqual(completion.result.status, BatchStatus.SUCCESS)
+        self.assertIsNotNone(completion.inventory)
+        self.assertEqual(completion.inventory.entries, ())
         self.assertEqual(called, [Path("/fixture/Documents"), Path("/fixture/Desktop")])
         self.assertTrue(all(ident != threading.get_ident() for ident in worker_ids))
         self.assertEqual(runner.state, ScanRunState.IDLE)
@@ -218,9 +220,12 @@ class FolderScanRunnerTests(unittest.TestCase):
         completion = runner.poll_completion()
         self.assertIsInstance(completion.error, RuntimeError)
         self.assertIsNone(completion.result)
+        self.assertIsNone(completion.inventory)
         runner.start(["downloads"])
         self.finish_workers()
-        self.assertEqual(runner.poll_completion().result.status, BatchStatus.SUCCESS)
+        completion = runner.poll_completion()
+        self.assertEqual(completion.result.status, BatchStatus.SUCCESS)
+        self.assertIsNotNone(completion.inventory)
 
     def test_close_during_scan_does_not_join_or_start_another_root(self):
         for fail_current_root in (False, True):
