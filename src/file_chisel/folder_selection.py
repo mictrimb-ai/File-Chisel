@@ -10,6 +10,7 @@ from queue import Empty, Queue
 from threading import Event, Lock, Thread
 from typing import Callable, Iterable
 
+from file_chisel.inventory import ScanInventory, build_inventory
 from file_chisel.scanner import FileSystemEntry, InvalidScanRootError, scan_directory
 
 
@@ -160,11 +161,15 @@ class ScanRunState(Enum):
 @dataclass(frozen=True)
 class ScanCompletion:
     result: BatchScanResult | None = None
+    inventory: ScanInventory | None = None
     error: Exception | None = None
 
     def __post_init__(self) -> None:
-        if (self.result is None) == (self.error is None):
+        has_success = self.result is not None or self.inventory is not None
+        if has_success == (self.error is not None):
             raise ValueError("Completion needs exactly one result or error.")
+        if (self.result is None) != (self.inventory is None):
+            raise ValueError("A successful completion needs both result and inventory.")
 
 
 class FolderScanRunner:
@@ -203,12 +208,13 @@ class FolderScanRunner:
     def _run(self, keys: tuple[str, ...]) -> None:
         try:
             result = self._coordinator.scan_selected(keys, stop_event=self._stop)
+            inventory = build_inventory(result)
         except _ScanCancelled:
             return
         except Exception as error:
             completion = ScanCompletion(error=error)
         else:
-            completion = ScanCompletion(result=result)
+            completion = ScanCompletion(result=result, inventory=inventory)
         with self._lock:
             if self._state is not ScanRunState.CLOSED:
                 self._completions.put_nowait(completion)

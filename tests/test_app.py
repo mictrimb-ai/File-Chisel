@@ -138,6 +138,7 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(len(self.controller.options), 3)
         self.assertEqual(self.controller.selected_keys, ())
         self.assertFalse(self.controller.can_scan)
+        self.assertIsNone(self.controller.inventory)
         self.controller.set_selected("documents", True)
         self.assertTrue(self.controller.can_scan)
         self.controller.set_selected("documents", False)
@@ -161,6 +162,8 @@ class ApplicationTests(unittest.TestCase):
         self.workers[0].finish()
         self.assertTrue(self.controller.poll())
         self.scanner.assert_called_once_with(Path("/fixture/Downloads"))
+        self.assertIsNotNone(self.controller.inventory)
+        self.assertEqual(self.controller.inventory.entries, ())
         self.assertTrue(self.controller.can_scan)
         self.assertEqual(self.controller.result_rows, ("Downloads — 0 entries",))
 
@@ -174,6 +177,8 @@ class ApplicationTests(unittest.TestCase):
         self.controller.poll()
         self.assertEqual(self.controller.status, "Scan partially completed.")
         self.assertEqual(self.controller.result.status, BatchStatus.PARTIAL)
+        self.assertEqual(self.controller.inventory.entries, (record,))
+        self.assertEqual(len(self.controller.inventory.failed_roots), 1)
         rows = self.controller.result_rows
         self.assertEqual(rows[0], "Documents — 1 entry")
         self.assertIn("/fixture/Downloads", rows[1])
@@ -194,10 +199,12 @@ class ApplicationTests(unittest.TestCase):
                 if isinstance(error, OSError):
                     self.assertEqual(self.controller.status, "Scan failed.")
                     self.assertEqual(self.controller.result.status, BatchStatus.FAILED)
+                    self.assertIsNotNone(self.controller.inventory)
                 else:
                     self.assertIn("unexpected error", self.controller.status)
                     self.assertIs(self.controller.error, error)
                     self.assertIsNone(self.controller.result)
+                    self.assertIsNone(self.controller.inventory)
 
     def test_changed_selection_clears_outdated_feedback_without_another_scan(self):
         self.controller.set_selected("documents", True)
@@ -206,6 +213,7 @@ class ApplicationTests(unittest.TestCase):
         self.controller.poll()
         self.controller.set_selected("desktop", True)
         self.assertIsNone(self.controller.result)
+        self.assertIsNone(self.controller.inventory)
         self.assertEqual(self.controller.result_rows, ())
         self.assertEqual(self.scanner.call_count, 1)
 
@@ -218,6 +226,7 @@ class ApplicationTests(unittest.TestCase):
         self.assertFalse(self.controller.poll())
         self.assertFalse(self.controller.can_scan)
         self.assertEqual(self.controller.status, "Closed.")
+        self.assertIsNone(self.controller.inventory)
         self.assertEqual(self.controller.result_rows, ())
         with self.assertRaises(ScanClosedError):
             self.controller.start_scan()

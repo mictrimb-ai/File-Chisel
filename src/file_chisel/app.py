@@ -13,6 +13,7 @@ from file_chisel.folder_selection import (
     ScanClosedError,
     ScanRunState,
 )
+from file_chisel.inventory import ScanInventory
 
 
 class ApplicationController:
@@ -27,6 +28,7 @@ class ApplicationController:
         self.options = self.runner.options
         self._selected: set[str] = set()
         self.result: BatchScanResult | None = None
+        self.inventory: ScanInventory | None = None
         self.error: Exception | None = None
         self.status = "Select at least one folder to scan."
 
@@ -50,6 +52,7 @@ class ApplicationController:
         else:
             self._selected.discard(key)
         self.result = None
+        self.inventory = None
         self.error = None
         self.status = (
             "Ready to scan selected folders." if self._selected
@@ -59,6 +62,7 @@ class ApplicationController:
     def start_scan(self) -> None:
         self.runner.start(self.selected_keys)
         self.result = None
+        self.inventory = None
         self.error = None
         self.status = "Scanning selected folders…"
 
@@ -67,6 +71,7 @@ class ApplicationController:
         if completion is None:
             return False
         self.result = completion.result
+        self.inventory = completion.inventory
         self.error = completion.error
         if completion.error is not None:
             self.status = "Scan could not complete because of an unexpected error."
@@ -99,6 +104,7 @@ class ApplicationController:
     def close(self) -> None:
         self.runner.close()
         self.result = None
+        self.inventory = None
         self.error = None
         self.status = "Closed."
 
