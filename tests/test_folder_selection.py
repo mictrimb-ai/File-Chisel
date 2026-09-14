@@ -20,6 +20,7 @@ from file_chisel.folder_selection import (
     folder_options,
 )
 from file_chisel.scanner import FileSystemEntry, InvalidScanRootError
+from file_chisel.hierarchy import build_hierarchy
 
 
 class FolderSelectionTests(unittest.TestCase):
@@ -276,6 +277,37 @@ class FolderScanRunnerTests(unittest.TestCase):
                 runner.start(["documents"])
         self.assertEqual(runner.state, ScanRunState.IDLE)
         scanner.assert_not_called()
+
+    def test_hierarchy_is_built_once_on_the_worker_and_delivered_with_inventory(self):
+        record = FileSystemEntry("item", Path("/fixture/Documents/item"), "file", 0, 1.0)
+        runner = self.make_runner(mock.Mock(return_value=[record]))
+        builder_threads = []
+
+        def build(inventory):
+            builder_threads.append(threading.get_ident())
+            return build_hierarchy(inventory)
+
+        with mock.patch("file_chisel.folder_selection.build_hierarchy", side_effect=build) as builder:
+            runner.start(["documents"])
+            self.finish_workers()
+            completion = runner.poll_completion()
+
+        builder.assert_called_once_with(completion.inventory)
+        self.assertEqual(len(builder_threads), 1)
+        self.assertNotEqual(builder_threads[0], threading.get_ident())
+        self.assertEqual(completion.hierarchy.children, {record.path.parent: (record,)})
+
+    def test_hierarchy_build_failure_is_delivered_as_an_unexpected_error(self):
+        runner = self.make_runner(mock.Mock(return_value=[]))
+        with mock.patch("file_chisel.folder_selection.build_hierarchy", side_effect=RuntimeError("index failed")):
+            runner.start(["documents"])
+            self.finish_workers()
+        completion = runner.poll_completion()
+        self.assertIsInstance(completion.error, RuntimeError)
+        self.assertIsNone(completion.result)
+        self.assertIsNone(completion.inventory)
+        self.assertIsNone(completion.hierarchy)
+        self.assertEqual(runner.state, ScanRunState.IDLE)
 
 
 if __name__ == "__main__":

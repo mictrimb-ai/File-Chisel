@@ -1,5 +1,6 @@
 """Headless controller tests and Tk event wiring tested with small fakes."""
 
+import builtins
 import os
 import subprocess
 import sys
@@ -20,6 +21,7 @@ from file_chisel.folder_selection import (
     ScanRunState,
 )
 from file_chisel.scanner import FileSystemEntry
+from file_chisel.hierarchy import build_hierarchy
 
 
 class ControlledThread:
@@ -82,11 +84,73 @@ class FakeWidget:
     def grid(self, *args, **kwargs):
         self.root.assert_live()
 
-    columnconfigure = grid
+    columnconfigure = rowconfigure = set = grid
 
     def configure(self, **kwargs):
         self.root.assert_live()
         self.options.update(kwargs)
+
+
+class FakeTreeview(FakeWidget):
+    """Model the Treeview calls used here, including open-event ordering."""
+
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.rows = {"": {"children": []}}
+        self.bindings = {}
+        self.next_item = 0
+        self.focused = ""
+
+    heading = column = xview = yview = FakeWidget.grid
+
+    def bind(self, sequence, callback):
+        self.root.assert_live()
+        self.bindings[sequence] = callback
+
+    def insert(self, parent, index, **kwargs):
+        self.root.assert_live()
+        assert index == "end"
+        self.next_item += 1
+        item = f"I{self.next_item}"
+        self.rows[item] = {
+            "parent": parent, "children": [], "text": "", "values": (),
+            "open": False, **kwargs,
+        }
+        self.rows[parent]["children"].append(item)
+        return item
+
+    def item(self, item, option=None, **kwargs):
+        self.root.assert_live()
+        self.rows[item].update(kwargs)
+        return self.rows[item][option] if option else dict(self.rows[item])
+
+    def exists(self, item):
+        self.root.assert_live()
+        return item in self.rows
+
+    def get_children(self, item=None):
+        self.root.assert_live()
+        return tuple(self.rows[item or ""]["children"])
+
+    def delete(self, *items):
+        self.root.assert_live()
+        for item in items:
+            for child in tuple(self.rows[item]["children"]):
+                self.delete(child)
+            parent = self.rows[item]["parent"]
+            self.rows[parent]["children"].remove(item)
+            del self.rows[item]
+
+    def focus(self, item=None):
+        self.root.assert_live()
+        if item is not None:
+            self.focused = item
+        return self.focused
+
+    def open_item(self, item):
+        self.focus(item)
+        self.bindings["<<TreeviewOpen>>"](SimpleNamespace(widget=self))
+        self.item(item, open=True)
 
 
 class FakeVariable:
@@ -106,6 +170,7 @@ class FakeVariable:
 FAKE_TK = SimpleNamespace(BooleanVar=FakeVariable)
 FAKE_TTK = SimpleNamespace(
     Frame=FakeWidget, Label=FakeWidget, Checkbutton=FakeWidget, Button=FakeWidget,
+    Treeview=FakeTreeview, Scrollbar=FakeWidget,
 )
 
 
@@ -133,6 +198,30 @@ class ApplicationTests(unittest.TestCase):
         )
         self.addCleanup(view.close)
         return root, view
+
+    def scan_in_view(self, keys):
+        root, view = self.make_view()
+        for key in keys:
+            self.controller.set_selected(key, True)
+        view.start_scan()
+        self.workers[-1].finish()
+        root.fire_next()
+        return root, view
+
+    def finish_callbacks(self, root):
+        for _ in range(1000):
+            if not root.callbacks:
+                return
+            root.fire_next()
+        self.fail("GUI callbacks did not finish")
+
+    def children_by_name(self, tree, parent=""):
+        return {tree.item(item, "text"): item for item in tree.get_children(parent)}
+
+    @staticmethod
+    def record(path, entry_type="file"):
+        path = Path(path)
+        return FileSystemEntry(path.name, path, entry_type, 0, 0.0)
 
     def test_initialization_and_checkbox_changes_do_not_scan(self):
         self.assertEqual(len(self.controller.options), 3)
@@ -283,6 +372,175 @@ class ApplicationTests(unittest.TestCase):
         self.assertIn("could not start", view.status_label.options["text"])
         self.assertEqual(root.callbacks, {})
         self.scanner.assert_not_called()
+
+    def test_view_hierarchy_matches_the_acceptance_example_without_filesystem_access(self):
+        self.scanner.side_effect = [
+            [
+                self.record("/fixture/Documents/Projects", "directory"),
+                self.record("/fixture/Documents/Projects/notes.txt"),
+                self.record("/fixture/Documents/Empty Notes", "directory"),
+            ],
+            PermissionError(13, "denied", "/private/hidden-name"),
+            [self.record("/fixture/Desktop/photo.jpg")],
+        ]
+        root, view = self.scan_in_view(["documents", "downloads", "desktop"])
+        tree = view.hierarchy_view.tree
+        roots = self.children_by_name(tree)
+        self.assertEqual(list(roots), ["Documents", "Downloads", "Desktop"])
+        self.assertTrue(all(not tree.item(item, "open") for item in roots.values()))
+        self.assertEqual(tree.get_children(roots["Downloads"]), ())
+        failure = tree.item(roots["Downloads"], "values")
+        self.assertEqual(failure, (
+            "Folder", "Scan failed: Permission denied. Check access to this folder. Contents unknown.",
+        ))
+        self.assertNotIn("hidden-name", failure[1])
+        self.assertEqual(
+            list(self.children_by_name(tree, roots["Documents"])),
+            ["Expand to view contents"],
+        )
+        forbidden = AssertionError("expansion accessed the filesystem")
+        with mock.patch.object(builtins, "open", side_effect=forbidden), \
+                mock.patch.object(Path, "open", side_effect=forbidden), \
+                mock.patch.object(Path, "resolve", side_effect=forbidden), \
+                mock.patch.object(os, "stat", side_effect=forbidden), \
+                mock.patch.object(os, "scandir", side_effect=forbidden):
+            tree.open_item(roots["Documents"])
+            self.finish_callbacks(root)
+            documents = self.children_by_name(tree, roots["Documents"])
+            self.assertEqual(list(documents), ["Projects", "Empty Notes"])
+            self.assertEqual(tree.item(documents["Empty Notes"], "values"), ("Folder", "Empty folder"))
+            self.assertEqual(tree.get_children(documents["Empty Notes"]), ())
+            tree.open_item(documents["Projects"])
+            tree.open_item(roots["Desktop"])
+            self.finish_callbacks(root)
+            self.assertEqual(list(self.children_by_name(tree, documents["Projects"])), ["notes.txt"])
+            self.assertEqual(list(self.children_by_name(tree, roots["Desktop"])), ["photo.jpg"])
+            tree.item(roots["Documents"], open=False)
+            tree.open_item(roots["Documents"])
+            self.assertEqual(root.callbacks, {})
+        self.assertEqual(self.scanner.call_count, 3)
+
+    def test_view_uses_recorded_types_instead_of_filename_suffixes(self):
+        self.scanner.return_value = [
+            self.record("/fixture/Documents/README"),
+            self.record("/fixture/Documents/archive.v1", "directory"),
+            self.record("/fixture/Documents/link.txt", "symlink"),
+            self.record("/fixture/Documents/device", "other"),
+        ]
+        root, view = self.scan_in_view(["documents"])
+        tree = view.hierarchy_view.tree
+        documents = tree.get_children()[0]
+        tree.open_item(documents)
+        self.finish_callbacks(root)
+        rows = self.children_by_name(tree, documents)
+        self.assertEqual(
+            [tree.item(item, "values") for item in rows.values()],
+            [("File", ""), ("Folder", "Empty folder"), ("Symbolic link", ""), ("Other", "")],
+        )
+        for item in rows.values():
+            self.assertEqual(tree.get_children(item), ())
+            tree.open_item(item)
+        self.assertEqual(root.callbacks, {})
+        self.scanner.assert_called_once()
+
+    def test_view_batches_wide_folders_fairly_and_reuses_the_worker_index(self):
+        wide = [self.record(f"/fixture/Documents/item-{i}") for i in range(250)]
+        small = [self.record(f"/fixture/Desktop/photo-{i}") for i in range(3)]
+        self.scanner.side_effect = [wide, small]
+        with mock.patch("file_chisel.folder_selection.build_hierarchy", wraps=build_hierarchy) as build:
+            root, view = self.scan_in_view(["documents", "desktop"])
+            tree = view.hierarchy_view.tree
+            roots = self.children_by_name(tree)
+            documents, desktop = roots["Documents"], roots["Desktop"]
+            tree.open_item(documents)
+            tree.open_item(desktop)
+            tree.open_item(documents)
+            self.assertEqual(len(root.callbacks), 1)
+            root.fire_next()
+            partial = self.children_by_name(tree, documents)
+            self.assertLess(len(partial), len(wide))
+            self.assertGreater(len(partial), 1)
+            self.assertEqual(list(self.children_by_name(tree, desktop)), [entry.name for entry in small])
+            self.assertEqual(len(root.callbacks), 1)
+            self.finish_callbacks(root)
+            self.assertEqual(list(self.children_by_name(tree, documents)), [entry.name for entry in wide])
+            before = tree.get_children(documents)
+            tree.item(documents, open=False)
+            tree.open_item(documents)
+            view._render()
+            view._render()
+            self.assertEqual(tree.get_children(documents), before)
+            self.assertEqual(root.callbacks, {})
+            build.assert_called_once_with(self.controller.inventory)
+
+    def test_selection_change_invalidates_pending_and_late_hierarchy_callbacks(self):
+        self.scanner.return_value = [self.record("/fixture/Documents/item")]
+        root, view = self.scan_in_view(["documents"])
+        tree = view.hierarchy_view.tree
+        tree.open_item(tree.get_children()[0])
+        stale_callback = next(iter(root.callbacks.values()))
+        view.variables["desktop"].set(True)
+        view._selection_changed("desktop")
+        self.assertEqual(root.callbacks, {})
+        self.assertEqual(tree.get_children(), ())
+        self.assertIsNone(self.controller.hierarchy)
+        stale_callback()
+        self.assertEqual(tree.get_children(), ())
+        self.scanner.assert_called_once()
+
+        # A late old batch must not cancel or populate a new snapshot's batch.
+        self.scanner.side_effect = [[self.record("/fixture/Documents/new-item")], []]
+        view.start_scan()
+        self.workers[-1].finish()
+        root.fire_next()
+        documents = self.children_by_name(tree)["Documents"]
+        tree.open_item(documents)
+        pending = dict(root.callbacks)
+        stale_callback()
+        self.assertEqual(root.callbacks, pending)
+        self.finish_callbacks(root)
+        self.assertEqual(list(self.children_by_name(tree, documents)), ["new-item"])
+
+    def test_new_scan_and_start_failure_clear_a_previously_displayed_hierarchy(self):
+        for fail_start in (False, True):
+            with self.subTest(fail_start=fail_start):
+                self.scanner.return_value = [self.record("/fixture/Documents/item")]
+                root, view = self.scan_in_view(["documents"])
+                tree = view.hierarchy_view.tree
+                tree.open_item(tree.get_children()[0])
+                stale_callback = next(iter(root.callbacks.values()))
+                if fail_start:
+                    with mock.patch("file_chisel.folder_selection.Thread") as thread:
+                        thread.return_value.start.side_effect = RuntimeError("cannot start")
+                        view.start_scan()
+                    self.assertEqual(root.callbacks, {})
+                    self.assertTrue(self.controller.can_scan)
+                else:
+                    self.scanner.side_effect = RuntimeError("unexpected scan failure")
+                    view.start_scan()
+                    self.workers[-1].finish()
+                    root.fire_next()
+                    self.scanner.side_effect = None
+                    self.assertIn("unexpected error", self.controller.status)
+                self.assertEqual(tree.get_children(), ())
+                self.assertIsNone(self.controller.inventory)
+                self.assertIsNone(self.controller.hierarchy)
+                stale_callback()
+                self.assertEqual(tree.get_children(), ())
+
+    def test_close_cancels_hierarchy_batches_and_late_events_do_not_touch_widgets(self):
+        self.scanner.return_value = [self.record("/fixture/Documents/item")]
+        root, view = self.scan_in_view(["documents"])
+        tree = view.hierarchy_view.tree
+        tree.open_item(tree.get_children()[0])
+        stale_callback = next(iter(root.callbacks.values()))
+        view.close()
+        self.assertEqual(root.callbacks, {})
+        self.assertTrue(root.destroyed)
+        self.assertIsNone(self.controller.hierarchy)
+        stale_callback()
+        view.hierarchy_view._opened()
+        view.hierarchy_view.close()
 
     def test_main_accepts_a_fixture_home_and_cleans_up_its_window(self):
         root = FakeRoot()

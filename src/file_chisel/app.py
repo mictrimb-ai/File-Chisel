@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from pathlib import Path
 
 from file_chisel.folder_selection import (
@@ -13,6 +14,7 @@ from file_chisel.folder_selection import (
     ScanClosedError,
     ScanRunState,
 )
+from file_chisel.hierarchy import HierarchyIndex
 from file_chisel.inventory import ScanInventory
 
 
@@ -29,6 +31,7 @@ class ApplicationController:
         self._selected: set[str] = set()
         self.result: BatchScanResult | None = None
         self.inventory: ScanInventory | None = None
+        self.hierarchy: HierarchyIndex | None = None
         self.error: Exception | None = None
         self.status = "Select at least one folder to scan."
 
@@ -53,6 +56,7 @@ class ApplicationController:
             self._selected.discard(key)
         self.result = None
         self.inventory = None
+        self.hierarchy = None
         self.error = None
         self.status = (
             "Ready to scan selected folders." if self._selected
@@ -60,10 +64,13 @@ class ApplicationController:
         )
 
     def start_scan(self) -> None:
-        self.runner.start(self.selected_keys)
-        self.result = None
-        self.inventory = None
-        self.error = None
+        try:
+            self.runner.start(self.selected_keys)
+        finally:
+            self.result = None
+            self.inventory = None
+            self.hierarchy = None
+            self.error = None
         self.status = "Scanning selected folders…"
 
     def poll(self) -> bool:
@@ -72,6 +79,7 @@ class ApplicationController:
             return False
         self.result = completion.result
         self.inventory = completion.inventory
+        self.hierarchy = completion.hierarchy
         self.error = completion.error
         if completion.error is not None:
             self.status = "Scan could not complete because of an unexpected error."
@@ -105,8 +113,139 @@ class ApplicationController:
         self.runner.close()
         self.result = None
         self.inventory = None
+        self.hierarchy = None
         self.error = None
         self.status = "Closed."
+
+
+class InventoryHierarchyView:
+    """Render only expanded snapshot branches, yielding between small batches."""
+
+    BATCH_SIZE = 100
+    TYPE_LABELS = {
+        "directory": "Folder", "file": "File",
+        "symlink": "Symbolic link", "other": "Other",
+    }
+
+    def __init__(self, root, parent, options, ttk_module) -> None:
+        self.root = root
+        self.options = options
+        self._inventory = None
+        self._index = None
+        self._closed = False
+        self._generation = 0
+        self._after_id = None
+        self._unopened = {}
+        self._pending = deque()
+
+        frame = ttk_module.Frame(parent)
+        frame.grid(row=8, column=0, columnspan=2, sticky="nsew", pady=(12, 0))
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
+        ttk_module.Label(frame, text="Scanned folder hierarchy").grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 4),
+        )
+        self.tree = ttk_module.Treeview(
+            frame, columns=("type", "status"), show="tree headings", height=9,
+        )
+        self.tree.heading("#0", text="Name")
+        self.tree.heading("type", text="Type")
+        self.tree.heading("status", text="Status")
+        self.tree.column("#0", width=280, minwidth=180)
+        self.tree.column("type", width=100, minwidth=100, stretch=False)
+        self.tree.column("status", width=400, minwidth=220)
+        vertical = ttk_module.Scrollbar(frame, orient="vertical", command=self.tree.yview)
+        horizontal = ttk_module.Scrollbar(frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
+        self.tree.grid(row=1, column=0, sticky="nsew")
+        vertical.grid(row=1, column=1, sticky="ns")
+        horizontal.grid(row=2, column=0, sticky="ew")
+        self.tree.bind("<<TreeviewOpen>>", self._opened)
+
+    def show(self, inventory, index) -> None:
+        if self._closed or inventory is self._inventory:
+            return
+        self._clear()
+        self._inventory, self._index = inventory, index
+        if inventory is None:
+            return
+        successes = {item.root: item for item in inventory.successful_roots}
+        failures = {item.root: item for item in inventory.failed_roots}
+        for option in self.options:
+            if option.path in successes:
+                self._add_entry("", option.label, option.path, "directory")
+            elif option.path in failures:
+                self.tree.insert(
+                    "", "end", text=option.label,
+                    values=("Folder", f"Scan failed: {failures[option.path].message} Contents unknown."),
+                )
+
+    def _add_entry(self, parent, name, path, entry_type) -> None:
+        is_folder = entry_type == "directory"
+        has_children = is_folder and bool(self._index.children.get(path))
+        status = "Empty folder" if is_folder and not has_children else ""
+        item = self.tree.insert(
+            parent, "end", text=name,
+            values=(self.TYPE_LABELS[entry_type], status),
+        )
+        if has_children:
+            placeholder = self.tree.insert(item, "end", text="Expand to view contents")
+            self._unopened[item] = (path, placeholder)
+
+    def _opened(self, event=None) -> None:
+        if self._closed:
+            return
+        # Tk sends this event before setting the focused item's open flag.
+        item = self.tree.focus()
+        unopened = self._unopened.pop(item, None)
+        if unopened is None:
+            return
+        path, placeholder = unopened
+        self.tree.item(placeholder, text="Loading contents…")
+        self._pending.append((item, iter(self._index.children[path]), placeholder))
+        self._schedule_batch()
+
+    def _schedule_batch(self) -> None:
+        if self._pending and self._after_id is None:
+            generation = self._generation
+            self._after_id = self.root.after(1, lambda: self._insert_batch(generation))
+
+    def _insert_batch(self, generation) -> None:
+        if self._closed or generation != self._generation:
+            return
+        self._after_id = None
+        for _ in range(self.BATCH_SIZE):
+            if not self._pending:
+                break
+            item, children, placeholder = self._pending.popleft()
+            if not self.tree.exists(item):
+                continue
+            try:
+                entry = next(children)
+            except StopIteration:
+                self.tree.delete(placeholder)
+                continue
+            self._add_entry(item, entry.name, entry.path, entry.entry_type)
+            # Round-robin keeps another expanded folder from waiting for a huge one.
+            self._pending.append((item, children, placeholder))
+        self._schedule_batch()
+
+    def _clear(self) -> None:
+        self._generation += 1
+        if self._after_id is not None:
+            self.root.after_cancel(self._after_id)
+            self._after_id = None
+        self._pending.clear()
+        self._unopened.clear()
+        roots = self.tree.get_children()
+        if roots:
+            self.tree.delete(*roots)
+        self._inventory = self._index = None
+
+    def close(self) -> None:
+        if not self._closed:
+            self._clear()
+            self._closed = True
 
 
 class FolderSelectionView:
@@ -122,12 +261,13 @@ class FolderSelectionView:
         self._closed = False
         self._after_id = None
         root.title("File Chisel")
-        root.minsize(620, 360)
+        root.minsize(620, 520)
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)
         frame = ttk_module.Frame(root, padding=20)
         frame.grid(row=0, column=0, sticky="nsew")
         frame.columnconfigure(1, weight=1)
+        frame.rowconfigure(8, weight=1)
         ttk_module.Label(
             frame, text="Choose folders to scan", font=("TkDefaultFont", 18, "bold"),
         ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
@@ -159,6 +299,7 @@ class FolderSelectionView:
         self.status_label.grid(row=6, column=0, columnspan=2, sticky="w")
         self.results_label = ttk_module.Label(frame, wraplength=580, justify="left")
         self.results_label.grid(row=7, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        self.hierarchy_view = InventoryHierarchyView(root, frame, controller.options, ttk_module)
         root.protocol("WM_DELETE_WINDOW", self.close)
         self._render()
 
@@ -179,6 +320,7 @@ class FolderSelectionView:
         self.scan_button.configure(state="normal" if self.controller.can_scan else "disabled")
         self.status_label.configure(text=self.controller.status)
         self.results_label.configure(text="\n".join(self.controller.result_rows))
+        self.hierarchy_view.show(self.controller.inventory, self.controller.hierarchy)
 
     def start_scan(self) -> None:
         if self._closed or not self.controller.can_scan:
@@ -211,6 +353,7 @@ class FolderSelectionView:
             self.root.after_cancel(self._after_id)
             self._after_id = None
         self.controller.close()
+        self.hierarchy_view.close()
         self.root.destroy()
 
 
