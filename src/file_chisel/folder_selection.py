@@ -10,6 +10,7 @@ from queue import Empty, Queue
 from threading import Event, Lock, Thread
 from typing import Callable, Iterable
 
+from file_chisel.hierarchy import HierarchyIndex, build_hierarchy
 from file_chisel.inventory import ScanInventory, build_inventory
 from file_chisel.scanner import FileSystemEntry, InvalidScanRootError, scan_directory
 
@@ -162,14 +163,19 @@ class ScanRunState(Enum):
 class ScanCompletion:
     result: BatchScanResult | None = None
     inventory: ScanInventory | None = None
+    hierarchy: HierarchyIndex | None = None
     error: Exception | None = None
 
     def __post_init__(self) -> None:
-        has_success = self.result is not None or self.inventory is not None
+        has_success = any(item is not None for item in (
+            self.result, self.inventory, self.hierarchy,
+        ))
         if has_success == (self.error is not None):
             raise ValueError("Completion needs exactly one result or error.")
-        if (self.result is None) != (self.inventory is None):
-            raise ValueError("A successful completion needs both result and inventory.")
+        if has_success and any(item is None for item in (
+            self.result, self.inventory, self.hierarchy,
+        )):
+            raise ValueError("A successful completion needs result, inventory, and hierarchy.")
 
 
 class FolderScanRunner:
@@ -209,12 +215,15 @@ class FolderScanRunner:
         try:
             result = self._coordinator.scan_selected(keys, stop_event=self._stop)
             inventory = build_inventory(result)
+            hierarchy = build_hierarchy(inventory)
         except _ScanCancelled:
             return
         except Exception as error:
             completion = ScanCompletion(error=error)
         else:
-            completion = ScanCompletion(result=result, inventory=inventory)
+            completion = ScanCompletion(
+                result=result, inventory=inventory, hierarchy=hierarchy,
+            )
         with self._lock:
             if self._state is not ScanRunState.CLOSED:
                 self._completions.put_nowait(completion)
