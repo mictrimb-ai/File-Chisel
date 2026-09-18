@@ -12,6 +12,7 @@ Status key: 📍 Active | ✅ Complete | ⛔ Blocked
 | BRAVO | Feature specialist | Build the core read-only filesystem scanner | ✅ Complete | PR #1 merged into `main` |
 | CHARLIE | Feature specialist | Build metadata-only inventory analysis | ✅ Complete | PR #3 and follow-up PR #4 merged into `main` |
 | DELTA | Feature specialist | Design the folder-selection interface | ✅ Complete | Design implemented by ALPHA in PR #6 |
+| ECHO | Feature specialist | Integrate the folder hierarchy into the interface | ✅ Complete | PR #10 merged into `main` |
 
 ## Completed Handoffs
 
@@ -77,3 +78,15 @@ Status key: 📍 Active | ✅ Complete | ⛔ Blocked
 - Validation: 50 tests passed in the implementation workspace, on the feature branch locally, and again on merged `main`.
 - Review: the Codex reviewer returned a thumbs-up with no posted findings before merging.
 - Result: merged into `main`; feature branch deleted locally and on GitHub; the first Phase 3 roadmap item is complete.
+
+### Parker / ECHO / ALPHA — Folder Hierarchy
+
+- Starting branch: `feature/folder-hierarchy`
+- Parker's contribution: implemented and tested `index_children`, committed as `371c681`.
+- ECHO's contribution: integrated the hierarchy into the scan results with an expandable, scrollable display.
+- Published feature commit: `6b25895`
+- Merge commit: `aeac623`
+- Pull request: [#10 — Display scanned folder hierarchy](https://github.com/mictrimb-ai/File-Chisel/pull/10)
+- Validation: 62 tests passed locally on the feature branch and again on merged `main`.
+- Manual validation: Parker expanded folders and inspected files in a successful Desktop scan.
+- Result: merged into `main`; feature branch deleted locally and on GitHub; the second Phase 3 item is complete.

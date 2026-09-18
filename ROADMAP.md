@@ -25,7 +25,7 @@ Status key: ✅ Complete | 📍 Current | ⬜ Not started
 ## Phase 3 — Inventory and Visualization 📍
 
 - [x] Store each scan as a structured inventory
-- [ ] Display the current folder hierarchy
+- [x] Display the current folder hierarchy
 - [ ] Summarize file types, sizes, and problem areas
 - [ ] Export a privacy-conscious inventory for AI analysis
 
