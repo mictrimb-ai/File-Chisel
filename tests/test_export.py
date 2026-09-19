@@ -1,9 +1,11 @@
 import builtins
+import gc
 import io
 import json
 import os
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest import mock
 
@@ -176,10 +178,15 @@ class ExportTests(unittest.TestCase):
         for failure in ("write", "close"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
                 destination = Path(directory) / "inventory.json"
-                with mock.patch.object(io, "open", side_effect=lambda *args, **kwargs:
-                                       FailingWriter(real_open(*args, **kwargs), failure)):
-                    with self.assertRaises(OSError):
-                        save_export(inventory, destination)
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always", ResourceWarning)
+                    with mock.patch.object(io, "open", side_effect=lambda *args, **kwargs:
+                                           FailingWriter(real_open(*args, **kwargs), failure)):
+                        with self.assertRaises(OSError):
+                            save_export(inventory, destination)
+                    gc.collect()
+                self.assertEqual([str(item.message) for item in caught
+                                  if issubclass(item.category, ResourceWarning)], [])
                 self.assertFalse(destination.exists())
                 self.assertEqual(list(Path(directory).iterdir()), [])
                 save_export(inventory, destination)
