@@ -11,6 +11,7 @@ from file_chisel.analysis import (
     find_likely_duplicate_files,
 )
 from file_chisel.scanner import FileSystemEntry
+from file_chisel.summary import InventorySummary, build_summary
 
 if TYPE_CHECKING:
     from file_chisel.folder_selection import (
@@ -29,6 +30,7 @@ class ScanInventory:
     entries: tuple[FileSystemEntry, ...]
     empty_directories: tuple[FileSystemEntry, ...]
     likely_duplicate_groups: tuple[LikelyDuplicateGroup, ...]
+    summary: InventorySummary
 
 
 def build_inventory(result: BatchScanResult) -> ScanInventory:
@@ -41,10 +43,18 @@ def build_inventory(result: BatchScanResult) -> ScanInventory:
         for root_result in successful_roots
         for entry in root_result.entries
     )
+    empty_directories = find_empty_directories(entries)
+    likely_duplicate_groups = find_likely_duplicate_files(entries)
     return ScanInventory(
         successful_roots=successful_roots,
         failed_roots=failed_roots,
         entries=entries,
-        empty_directories=find_empty_directories(entries),
-        likely_duplicate_groups=find_likely_duplicate_files(entries),
+        empty_directories=empty_directories,
+        likely_duplicate_groups=likely_duplicate_groups,
+        summary=build_summary(
+            entries,
+            empty_directories=empty_directories,
+            likely_duplicate_groups=likely_duplicate_groups,
+            failed_root_count=len(failed_roots),
+        ),
     )

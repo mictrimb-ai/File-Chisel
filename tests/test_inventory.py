@@ -55,6 +55,15 @@ class ScanInventoryTests(unittest.TestCase):
         self.assertEqual(duplicate_group.normalized_name, "report.txt")
         self.assertEqual(duplicate_group.size, 100)
         self.assertEqual(set(duplicate_group.files), {report, report_copy})
+        self.assertEqual(
+            (inventory.summary.file_count, inventory.summary.directory_count),
+            (3, 1),
+        )
+        self.assertEqual(inventory.summary.total_file_size, 400)
+        self.assertEqual(inventory.summary.empty_directory_count, 1)
+        self.assertEqual(inventory.summary.likely_duplicate_group_count, 1)
+        self.assertEqual(inventory.summary.potential_duplicate_size, 100)
+        self.assertEqual(inventory.summary.failed_root_count, 1)
 
     def test_all_failed_batch_produces_an_empty_successful_inventory(self):
         failure = RootScanFailure(
@@ -68,6 +77,9 @@ class ScanInventoryTests(unittest.TestCase):
         self.assertEqual(inventory.entries, ())
         self.assertEqual(inventory.empty_directories, ())
         self.assertEqual(inventory.likely_duplicate_groups, ())
+        self.assertEqual(inventory.summary.file_count, 0)
+        self.assertEqual(inventory.summary.total_file_size, 0)
+        self.assertEqual(inventory.summary.failed_root_count, 1)
 
     def test_snapshot_is_frozen_and_building_it_performs_no_filesystem_access(self):
         record = entry("/private/report.txt")
