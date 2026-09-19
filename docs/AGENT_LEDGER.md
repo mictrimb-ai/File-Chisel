@@ -106,3 +106,21 @@ Status key: 📍 Active | ✅ Complete | ⛔ Blocked
 - Manual validation: a Downloads scan displayed coherent file and folder totals, storage usage, extension rankings, large-file counts, likely duplicate estimates, and the existing expandable hierarchy.
 - Review: the Codex reviewer returned a thumbs-up with no posted findings before merging.
 - Result: merged into `main`; feature branch deleted locally and on GitHub; the third Phase 3 item is complete.
+
+### Parker / ALPHA — Privacy-Conscious Inventory Export
+
+- Starting branch: `feature/privacy-conscious-export`
+- Parker's contribution: implemented `build_entry_record` and its focused test, committed as `b8967eb`.
+- ALPHA's contribution: added deterministic JSON export, Save controls, privacy guidance, and failure handling.
+- Changed files: `README.md`, `src/file_chisel/app.py`, `src/file_chisel/export.py`, `tests/test_app.py`, `tests/test_export.py`
+- Integration commit: `58d4d44`
+- Review fix: `7188221` prevents failed writes from leaving an incomplete destination and preserves existing files.
+- Feature pull request: [#14 — Add privacy-conscious inventory JSON export](https://github.com/mictrimb-ai/File-Chisel/pull/14)
+- Feature merge commit: `a3027d8`
+- Follow-up commit: `93485e3` fixes temporary-file cleanup after close failures on Python 3.14.7.
+- Follow-up pull request: [#15 — Close export temporary files explicitly after I/O failures](https://github.com/mictrimb-ai/File-Chisel/pull/15)
+- Follow-up merge commit: `f17311b`
+- Automated validation: 78 tests passed without warnings locally on the fix branch and again on merged `main`.
+- Manual validation: export disabled before scanning; cancellation leaves the app usable; saving succeeds; exported JSON uses relative paths and omits the absolute home path and modification times.
+- Review: Codex identified the incomplete-write issue in PR #14, which was fixed before merging; PR #15 review completed with no posted findings.
+- Result: both PRs merged into `main`; feature and fix branches deleted locally and on GitHub; Phase 3 complete.
