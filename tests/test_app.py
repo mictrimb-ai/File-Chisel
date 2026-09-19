@@ -275,6 +275,12 @@ class ApplicationTests(unittest.TestCase):
         self.assertNotIn("0 entries", rows[1])
         self.assertEqual(rows[2], "Desktop — 0 entries")
         self.assertNotIn("secret.txt", "\n".join(rows))
+        self.assertEqual(self.controller.summary_lines, (
+            "1 file · 0 folders · 2 B",
+            "File types: .txt: 1 file · 2 B",
+            "Needs attention: 0 large files (100 MB+) · 0 empty folders · "
+            "0 likely duplicate groups · 1 failed folder",
+        ))
 
     def test_expected_and_unexpected_failure_both_restore_scan_eligibility(self):
         for error in (OSError("I/O failure"), RuntimeError("programming bug")):
@@ -304,6 +310,7 @@ class ApplicationTests(unittest.TestCase):
         self.assertIsNone(self.controller.result)
         self.assertIsNone(self.controller.inventory)
         self.assertEqual(self.controller.result_rows, ())
+        self.assertEqual(self.controller.summary_lines, ())
         self.assertEqual(self.scanner.call_count, 1)
 
     def test_close_ignores_late_completion_and_rejects_new_work(self):
@@ -345,6 +352,13 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(view.scan_button.options["state"], "normal")
         self.assertEqual(view.results_label.options["text"], "Documents — 0 entries")
         self.assertEqual(view.status_label.options["text"], "Scan completed successfully.")
+        self.assertEqual(
+            view.summary_label.options["text"],
+            "0 files · 0 folders · 0 B\n"
+            "File types: None\n"
+            "Needs attention: 0 large files (100 MB+) · 0 empty folders · "
+            "0 likely duplicate groups · 0 failed folders",
+        )
 
     def test_view_close_cancels_polling_and_late_callbacks_do_not_touch_widgets(self):
         root, view = self.make_view()

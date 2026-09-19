@@ -16,6 +16,7 @@ from file_chisel.folder_selection import (
 )
 from file_chisel.hierarchy import HierarchyIndex
 from file_chisel.inventory import ScanInventory
+from file_chisel.summary import format_summary_lines
 
 
 class ApplicationController:
@@ -109,6 +110,12 @@ class ApplicationController:
                 )
         return tuple(rows)
 
+    @property
+    def summary_lines(self) -> tuple[str, ...]:
+        if self.inventory is None:
+            return ()
+        return format_summary_lines(self.inventory.summary)
+
     def close(self) -> None:
         self.runner.close()
         self.result = None
@@ -139,7 +146,7 @@ class InventoryHierarchyView:
         self._pending = deque()
 
         frame = ttk_module.Frame(parent)
-        frame.grid(row=8, column=0, columnspan=2, sticky="nsew", pady=(12, 0))
+        frame.grid(row=10, column=0, columnspan=2, sticky="nsew", pady=(12, 0))
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(1, weight=1)
         ttk_module.Label(frame, text="Scanned folder hierarchy").grid(
@@ -261,13 +268,13 @@ class FolderSelectionView:
         self._closed = False
         self._after_id = None
         root.title("File Chisel")
-        root.minsize(620, 520)
+        root.minsize(620, 620)
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)
         frame = ttk_module.Frame(root, padding=20)
         frame.grid(row=0, column=0, sticky="nsew")
         frame.columnconfigure(1, weight=1)
-        frame.rowconfigure(8, weight=1)
+        frame.rowconfigure(10, weight=1)
         ttk_module.Label(
             frame, text="Choose folders to scan", font=("TkDefaultFont", 18, "bold"),
         ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
@@ -299,6 +306,13 @@ class FolderSelectionView:
         self.status_label.grid(row=6, column=0, columnspan=2, sticky="w")
         self.results_label = ttk_module.Label(frame, wraplength=580, justify="left")
         self.results_label.grid(row=7, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        ttk_module.Label(frame, text="Inventory summary").grid(
+            row=8, column=0, columnspan=2, sticky="w", pady=(12, 0),
+        )
+        self.summary_label = ttk_module.Label(
+            frame, wraplength=580, justify="left",
+        )
+        self.summary_label.grid(row=9, column=0, columnspan=2, sticky="w", pady=(4, 0))
         self.hierarchy_view = InventoryHierarchyView(root, frame, controller.options, ttk_module)
         root.protocol("WM_DELETE_WINDOW", self.close)
         self._render()
@@ -320,6 +334,7 @@ class FolderSelectionView:
         self.scan_button.configure(state="normal" if self.controller.can_scan else "disabled")
         self.status_label.configure(text=self.controller.status)
         self.results_label.configure(text="\n".join(self.controller.result_rows))
+        self.summary_label.configure(text="\n".join(self.controller.summary_lines))
         self.hierarchy_view.show(self.controller.inventory, self.controller.hierarchy)
 
     def start_scan(self) -> None:
