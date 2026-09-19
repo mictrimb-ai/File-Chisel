@@ -22,14 +22,14 @@ Status key: ✅ Complete | 📍 Current | ⬜ Not started
 - [x] Detect empty folders and likely duplicate files
 - [x] Add scanner tests
 
-## Phase 3 — Inventory and Visualization 📍
+## Phase 3 — Inventory and Visualization ✅
 
 - [x] Store each scan as a structured inventory
 - [x] Display the current folder hierarchy
 - [x] Summarize file types, sizes, and problem areas
-- [ ] Export a privacy-conscious inventory for AI analysis
+- [x] Export a privacy-conscious inventory for AI analysis
 
-## Phase 4 — Reorganization Planner ⬜
+## Phase 4 — Reorganization Planner 📍
 
 - [ ] Generate a proposed folder structure
 - [ ] Produce an exact move plan
