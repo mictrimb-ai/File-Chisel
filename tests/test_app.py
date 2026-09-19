@@ -1,6 +1,7 @@
 """Headless controller tests and Tk event wiring tested with small fakes."""
 
 import builtins
+import json
 import os
 import subprocess
 import sys
@@ -326,6 +327,57 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(self.controller.result_rows, ())
         with self.assertRaises(ScanClosedError):
             self.controller.start_scan()
+
+    def test_export_requires_current_idle_inventory(self):
+        with self.assertRaises(ValueError):
+            self.controller.export_to(Path("/unused/export.json"))
+        self.controller.set_selected("documents", True)
+        self.controller.start_scan()
+        self.assertFalse(self.controller.can_export)
+        self.workers[0].finish()
+        self.controller.poll()
+        self.assertTrue(self.controller.can_export)
+        self.controller.set_selected("desktop", True)
+        self.assertFalse(self.controller.can_export)
+        with self.assertRaises(ValueError):
+            self.controller.export_to(Path("/unused/export.json"))
+
+    def test_gui_export_cancel_new_file_and_existing_file(self):
+        import tempfile
+
+        self.scanner.return_value = [self.record("/fixture/Documents/notes.txt")]
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "inventory.json"
+            selected = iter(("", str(destination), str(destination)))
+            root = FakeRoot()
+            view = FolderSelectionView(
+                root, self.controller, tk_module=FAKE_TK, ttk_module=FAKE_TTK,
+                save_dialog=lambda **kwargs: next(selected),
+            )
+            self.addCleanup(view.close)
+            button = view.export_button
+            self.assertEqual(button.options["state"], "disabled")
+            view.save_inventory()
+            self.assertFalse(destination.exists())
+            self.controller.set_selected("documents", True)
+            view.start_scan()
+            self.assertEqual(button.options["state"], "disabled")
+            self.workers[-1].finish()
+            root.fire_next()
+            self.assertEqual(button.options["state"], "normal")
+            view.save_inventory()
+            self.assertFalse(destination.exists())
+            view.save_inventory()
+            payload = json.loads(destination.read_text(encoding="utf-8"))
+            self.assertEqual(payload["entries"][0]["relative_path"], "notes.txt")
+            view.save_inventory()
+            self.assertIn("already exists", view.status_label.options["text"])
+            self.assertEqual(json.loads(destination.read_text(encoding="utf-8")), payload)
+            view.variables["documents"].set(False)
+            view._selection_changed("documents")
+            self.assertEqual(button.options["state"], "disabled")
+            view.close()
+            view.save_inventory()
 
     def test_view_checkbox_button_and_completion_wiring(self):
         root, view = self.make_view()

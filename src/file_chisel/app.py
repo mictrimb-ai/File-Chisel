@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import deque
 from pathlib import Path
 
+from file_chisel.export import save_export
 from file_chisel.folder_selection import (
     BatchScanResult,
     BatchStatus,
@@ -43,6 +44,17 @@ class ApplicationController:
     @property
     def can_scan(self) -> bool:
         return bool(self._selected) and self.runner.state is ScanRunState.IDLE
+
+    @property
+    def can_export(self) -> bool:
+        return self.inventory is not None and self.runner.state is ScanRunState.IDLE
+
+    def export_to(self, destination: Path) -> None:
+        """Save the completed snapshot at an explicitly selected new path."""
+
+        if not self.can_export:
+            raise ValueError("Complete a scan before exporting its inventory.")
+        save_export(self.inventory, destination)
 
     def set_selected(self, key: str, selected: bool) -> None:
         if self.runner.state is ScanRunState.CLOSED:
@@ -258,17 +270,20 @@ class InventoryHierarchyView:
 class FolderSelectionView:
     """Translate Tk events into controller actions on the GUI thread."""
 
-    def __init__(self, root, controller, *, tk_module=None, ttk_module=None) -> None:
+    def __init__(
+        self, root, controller, *, tk_module=None, ttk_module=None, save_dialog=None,
+    ) -> None:
         if tk_module is None or ttk_module is None:
             import tkinter as tk_module
             from tkinter import ttk as ttk_module
 
         self.root = root
         self.controller = controller
+        self._save_dialog = save_dialog
         self._closed = False
         self._after_id = None
         root.title("File Chisel")
-        root.minsize(620, 620)
+        root.minsize(620, 680)
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)
         frame = ttk_module.Frame(root, padding=20)
@@ -314,6 +329,15 @@ class FolderSelectionView:
         )
         self.summary_label.grid(row=9, column=0, columnspan=2, sticky="w", pady=(4, 0))
         self.hierarchy_view = InventoryHierarchyView(root, frame, controller.options, ttk_module)
+        self.export_button = ttk_module.Button(
+            frame, text="Save inventory JSON…", command=self.save_inventory,
+        )
+        self.export_button.grid(row=11, column=0, columnspan=2, sticky="w", pady=(12, 4))
+        ttk_module.Label(
+            frame,
+            text="Export includes file and folder names. Review the JSON before sharing it with an AI.",
+            wraplength=580, justify="left",
+        ).grid(row=12, column=0, columnspan=2, sticky="w")
         root.protocol("WM_DELETE_WINDOW", self.close)
         self._render()
 
@@ -332,10 +356,36 @@ class FolderSelectionView:
         for checkbox in self.checkboxes:
             checkbox.configure(state="disabled" if busy else "normal")
         self.scan_button.configure(state="normal" if self.controller.can_scan else "disabled")
+        self.export_button.configure(state="normal" if self.controller.can_export else "disabled")
         self.status_label.configure(text=self.controller.status)
         self.results_label.configure(text="\n".join(self.controller.result_rows))
         self.summary_label.configure(text="\n".join(self.controller.summary_lines))
         self.hierarchy_view.show(self.controller.inventory, self.controller.hierarchy)
+
+    def save_inventory(self) -> None:
+        if self._closed or not self.controller.can_export:
+            return
+        if self._save_dialog is None:
+            from tkinter import filedialog
+
+            dialog = filedialog.asksaveasfilename
+        else:
+            dialog = self._save_dialog
+        try:
+            destination = dialog(
+                parent=self.root, title="Save inventory JSON",
+                defaultextension=".json", filetypes=[("JSON files", "*.json")],
+            )
+            if not destination:
+                return
+            self.controller.export_to(Path(destination))
+        except FileExistsError:
+            self.controller.status = "Export not saved: that file already exists. Choose a new name."
+        except (OSError, ValueError):
+            self.controller.status = "Export not saved. Choose another location and try again."
+        else:
+            self.controller.status = "Inventory JSON saved. Review its names before sharing."
+        self._render()
 
     def start_scan(self) -> None:
         if self._closed or not self.controller.can_scan:
