@@ -90,3 +90,19 @@ Status key: 📍 Active | ✅ Complete | ⛔ Blocked
 - Validation: 62 tests passed locally on the feature branch and again on merged `main`.
 - Manual validation: Parker expanded folders and inspected files in a successful Desktop scan.
 - Result: merged into `main`; feature branch deleted locally and on GitHub; the second Phase 3 item is complete.
+
+### Parker / ALPHA — Inventory Summary
+
+- Starting branch: `feature/inventory-summary`
+- Parker's contribution: implemented and tested `calculate_file_totals`, providing the regular-file count and combined byte size.
+- Contribution commit: `c8b04b0`
+- Cleanup commit: `52e5905`
+- ALPHA's contribution: expanded the calculation into an immutable inventory summary and integrated it into the interface.
+- Changed files: `src/file_chisel/app.py`, `src/file_chisel/inventory.py`, `src/file_chisel/summary.py`, `tests/test_app.py`, `tests/test_inventory.py`, `tests/test_summary.py`
+- Integration commit: `dbee735`
+- Merge commit: `5e4ef67`
+- Pull request: [#12 — Add inventory metadata summary](https://github.com/mictrimb-ai/File-Chisel/pull/12)
+- Validation: 67 tests passed in the implementation workspace, locally on the feature branch, and again on merged `main`.
+- Manual validation: a Downloads scan displayed coherent file and folder totals, storage usage, extension rankings, large-file counts, likely duplicate estimates, and the existing expandable hierarchy.
+- Review: the Codex reviewer returned a thumbs-up with no posted findings before merging.
+- Result: merged into `main`; feature branch deleted locally and on GitHub; the third Phase 3 item is complete.

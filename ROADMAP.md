@@ -26,7 +26,7 @@ Status key: ✅ Complete | 📍 Current | ⬜ Not started
 
 - [x] Store each scan as a structured inventory
 - [x] Display the current folder hierarchy
-- [ ] Summarize file types, sizes, and problem areas
+- [x] Summarize file types, sizes, and problem areas
 - [ ] Export a privacy-conscious inventory for AI analysis
 
 ## Phase 4 — Reorganization Planner ⬜
