@@ -1,4 +1,5 @@
 import builtins
+import io
 import json
 import os
 import tempfile
@@ -139,3 +140,99 @@ class ExportTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 save_export(inventory, destination)
             self.assertEqual(destination.read_text(encoding="utf-8"), "untouched")
+
+    def test_failed_write_or_close_leaves_destination_available_for_retry(self):
+        inventory = build_inventory(BatchScanResult((
+            RootScanSuccess(Path("/home/Documents"), ()),
+        ), ()))
+        real_open = io.open
+
+        class FailingWriter:
+            def __init__(self, wrapped, failure):
+                self.wrapped = wrapped
+                self.failure = failure
+
+            def __getattr__(self, name):
+                return getattr(self.wrapped, name)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                self.close()
+
+            def write(self, contents):
+                if self.failure == "write":
+                    self.wrapped.write(contents[:10])
+                    raise OSError("Injected disk-full error")
+                return self.wrapped.write(contents)
+
+            def close(self):
+                self.wrapped.close()
+                if self.failure == "close":
+                    self.failure = None
+                    raise OSError("Injected close error")
+
+        for failure in ("write", "close"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                destination = Path(directory) / "inventory.json"
+                with mock.patch.object(io, "open", side_effect=lambda *args, **kwargs:
+                                       FailingWriter(real_open(*args, **kwargs), failure)):
+                    with self.assertRaises(OSError):
+                        save_export(inventory, destination)
+                self.assertFalse(destination.exists())
+                self.assertEqual(list(Path(directory).iterdir()), [])
+                save_export(inventory, destination)
+                self.assertEqual(destination.read_text(encoding="utf-8"), encode_export(inventory))
+
+    def test_sync_or_publish_error_leaves_no_destination_or_staging_files(self):
+        inventory = build_inventory(BatchScanResult((
+            RootScanSuccess(Path("/home/Documents"), ()),
+        ), ()))
+        for operation in ("fsync", "link"):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as directory:
+                destination = Path(directory) / "inventory.json"
+                with mock.patch(f"file_chisel.export.os.{operation}",
+                                side_effect=OSError("Injected I/O error")):
+                    with self.assertRaises(OSError):
+                        save_export(inventory, destination)
+                self.assertFalse(destination.exists())
+                self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_competing_file_at_publication_is_preserved(self):
+        inventory = build_inventory(BatchScanResult((
+            RootScanSuccess(Path("/home/Documents"), ()),
+        ), ()))
+        real_link = os.link
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "inventory.json"
+
+            def publish(source, target):
+                # The staging file must already contain a complete document.
+                self.assertEqual(Path(source).read_text(encoding="utf-8"), encode_export(inventory))
+                Path(target).write_text("another writer's file", encoding="utf-8")
+                real_link(source, target)
+
+            with mock.patch("file_chisel.export.os.link", side_effect=publish):
+                with self.assertRaises(FileExistsError):
+                    save_export(inventory, destination)
+            self.assertEqual(destination.read_text(encoding="utf-8"), "another writer's file")
+            self.assertEqual(list(Path(directory).iterdir()), [destination])
+
+    def test_existing_symlink_is_preserved_without_touching_its_target(self):
+        inventory = build_inventory(BatchScanResult((
+            RootScanSuccess(Path("/home/Documents"), ()),
+        ), ()))
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "original.txt"
+            destination = Path(directory) / "inventory.json"
+            destination.symlink_to(target)
+            with self.assertRaises(FileExistsError):
+                save_export(inventory, destination)
+            self.assertTrue(destination.is_symlink())
+            self.assertFalse(target.exists())
+            target.write_text("unchanged", encoding="utf-8")
+            with self.assertRaises(FileExistsError):
+                save_export(inventory, destination)
+            self.assertTrue(destination.is_symlink())
+            self.assertEqual(target.read_text(encoding="utf-8"), "unchanged")

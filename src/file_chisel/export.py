@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 
 from file_chisel.inventory import ScanInventory
@@ -109,8 +111,21 @@ def encode_export(inventory: ScanInventory) -> str:
 
 
 def save_export(inventory: ScanInventory, destination: Path) -> None:
-    """Create a new JSON file after the user has chosen its destination."""
+    """Publish complete JSON at a new path, with no replacement or partial file."""
 
     contents = encode_export(inventory)
-    with Path(destination).open("x", encoding="utf-8") as output:
-        output.write(contents)
+    destination = Path(destination)
+    # Staging alongside the target keeps publication on the same filesystem.
+    # Cleanup affects only this app-owned directory, never the destination.
+    with tempfile.TemporaryDirectory(
+        dir=destination.parent, prefix=".file-chisel-export-", ignore_cleanup_errors=True,
+    ) as staging:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=staging, delete=False,
+        ) as output:
+            output.write(contents)
+            output.flush()
+            os.fsync(output.fileno())
+        # A hard link publishes the closed, complete file atomically and fails
+        # if another file (including a symlink) already occupies the target.
+        os.link(output.name, destination)
