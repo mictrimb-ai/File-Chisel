@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from contextlib import closing
 from pathlib import Path
 
 from file_chisel.inventory import ScanInventory
@@ -120,9 +121,10 @@ def save_export(inventory: ScanInventory, destination: Path) -> None:
     with tempfile.TemporaryDirectory(
         dir=destination.parent, prefix=".file-chisel-export-", ignore_cleanup_errors=True,
     ) as staging:
-        with tempfile.NamedTemporaryFile(
+        # Close through the wrapper even if closing its underlying file fails.
+        with closing(tempfile.NamedTemporaryFile(
             mode="w", encoding="utf-8", dir=staging, delete=False,
-        ) as output:
+        )) as output:
             output.write(contents)
             output.flush()
             os.fsync(output.fileno())
