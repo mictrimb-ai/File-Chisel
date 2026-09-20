@@ -124,3 +124,18 @@ Status key: 📍 Active | ✅ Complete | ⛔ Blocked
 - Manual validation: export disabled before scanning; cancellation leaves the app usable; saving succeeds; exported JSON uses relative paths and omits the absolute home path and modification times.
 - Review: Codex identified the incomplete-write issue in PR #14, which was fixed before merging; PR #15 review completed with no posted findings.
 - Result: both PRs merged into `main`; feature and fix branches deleted locally and on GitHub; Phase 3 complete.
+
+### Parker / ALPHA — AI Folder Proposal and Preview
+
+- Starting branch: `feature/ai-folder-proposal`
+- Parker's contribution: implemented and tested the initial JSON parser in `335efe6`.
+- ALPHA's contribution: `92356cc` added Copy AI request, bounded JSON import and validation, and an expandable proposed hierarchy with AI-supplied reasons.
+- Changed files: `AGENTS.md`, `README.md`, `docs/AI_PROPOSALS.md`, `src/file_chisel/app.py`, `src/file_chisel/proposal.py`, `src/file_chisel/proposal_view.py`, `tests/test_app.py`, `tests/test_proposal.py`, `tests/test_proposal_view.py`
+- Safety clarification: Parker approved `5a3ac93`, allowing the explicitly selected proposal JSON to be read for validation and preview while keeping scanning and inventory analysis metadata-only.
+- Pull request: [#17 — Add AI folder proposal import and preview](https://github.com/mictrimb-ai/File-Chisel/pull/17)
+- Merge commit: `57a4c56`
+- Validation: 101 tests passed locally on the feature branch and again on merged `main`.
+- Manual validation: Parker copied the AI request after scanning, imported an AI response, inspected a proposed file's source, destination, and reason, and confirmed that a selection change closes the preview and disables the AI controls.
+- Review: Codex's policy finding was addressed, its thread was resolved, and a review of `5a3ac93` found no major issues.
+- Scope: the preview proposes new folders and regular-file placements among successfully scanned roots; existing folders remain in place. Exact move planning, conflict checks, simulation, and execution remain future work.
+- Result: merged into `main`; feature branch deleted locally and on GitHub; the first Phase 4 roadmap item is complete.
