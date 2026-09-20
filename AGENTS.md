@@ -8,7 +8,7 @@ File Chisel is a local macOS application that helps a user safely reorganize the
 
 1. Never delete user files or folders.
 2. Never overwrite an existing file or folder.
-3. Never read file contents; use metadata only.
+3. Scanning and inventory analysis must use metadata only, without opening scanned file contents. Proposal import may read the file explicitly selected by the user as AI proposal JSON, solely for validation and preview. It must not open files referenced within that proposal.
 4. Never make real filesystem changes without approval of the complete batch plan.
 5. Simulate the complete plan before offering permanent implementation.
 6. Record every executed operation in a complete undo log.

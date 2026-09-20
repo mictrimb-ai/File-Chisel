@@ -17,6 +17,8 @@ from file_chisel.folder_selection import (
 )
 from file_chisel.hierarchy import HierarchyIndex
 from file_chisel.inventory import ScanInventory
+from file_chisel.proposal import FolderProposal, build_ai_request, load_proposal
+from file_chisel.proposal_view import open_proposal_preview
 from file_chisel.summary import format_summary_lines
 
 
@@ -34,6 +36,7 @@ class ApplicationController:
         self.result: BatchScanResult | None = None
         self.inventory: ScanInventory | None = None
         self.hierarchy: HierarchyIndex | None = None
+        self.proposal: FolderProposal | None = None
         self.error: Exception | None = None
         self.status = "Select at least one folder to scan."
 
@@ -56,6 +59,21 @@ class ApplicationController:
             raise ValueError("Complete a scan before exporting its inventory.")
         save_export(self.inventory, destination)
 
+    @property
+    def can_propose(self) -> bool:
+        return self.can_export and bool(self.inventory.successful_roots)
+
+    def ai_request(self) -> str:
+        if not self.can_propose:
+            raise ValueError("Complete a successful scan before requesting a proposal.")
+        return build_ai_request(self.inventory)
+
+    def import_proposal(self, source: Path) -> None:
+        if not self.can_propose:
+            raise ValueError("Complete a successful scan before importing a proposal.")
+        self.proposal = None
+        self.proposal = load_proposal(source, self.inventory)
+
     def set_selected(self, key: str, selected: bool) -> None:
         if self.runner.state is ScanRunState.CLOSED:
             raise ScanClosedError("The scan window is closed.")
@@ -70,6 +88,7 @@ class ApplicationController:
         self.result = None
         self.inventory = None
         self.hierarchy = None
+        self.proposal = None
         self.error = None
         self.status = (
             "Ready to scan selected folders." if self._selected
@@ -83,6 +102,7 @@ class ApplicationController:
             self.result = None
             self.inventory = None
             self.hierarchy = None
+            self.proposal = None
             self.error = None
         self.status = "Scanning selected folders…"
 
@@ -133,6 +153,7 @@ class ApplicationController:
         self.result = None
         self.inventory = None
         self.hierarchy = None
+        self.proposal = None
         self.error = None
         self.status = "Closed."
 
@@ -272,6 +293,7 @@ class FolderSelectionView:
 
     def __init__(
         self, root, controller, *, tk_module=None, ttk_module=None, save_dialog=None,
+        open_dialog=None, preview_factory=open_proposal_preview,
     ) -> None:
         if tk_module is None or ttk_module is None:
             import tkinter as tk_module
@@ -280,6 +302,10 @@ class FolderSelectionView:
         self.root = root
         self.controller = controller
         self._save_dialog = save_dialog
+        self._open_dialog = open_dialog
+        self._preview_factory = preview_factory
+        self._proposal_preview = None
+        self._preview_proposal = None
         self._closed = False
         self._after_id = None
         root.title("File Chisel")
@@ -329,13 +355,24 @@ class FolderSelectionView:
         )
         self.summary_label.grid(row=9, column=0, columnspan=2, sticky="w", pady=(4, 0))
         self.hierarchy_view = InventoryHierarchyView(root, frame, controller.options, ttk_module)
+        actions = ttk_module.Frame(frame)
+        actions.grid(row=11, column=0, columnspan=2, sticky="w", pady=(12, 4))
         self.export_button = ttk_module.Button(
-            frame, text="Save inventory JSON…", command=self.save_inventory,
+            actions, text="Save inventory JSON…", command=self.save_inventory,
         )
-        self.export_button.grid(row=11, column=0, columnspan=2, sticky="w", pady=(12, 4))
+        self.export_button.grid(row=0, column=0, sticky="w", padx=(0, 8))
+        self.request_button = ttk_module.Button(
+            actions, text="Copy AI request", command=self.copy_ai_request,
+        )
+        self.request_button.grid(row=0, column=1, sticky="w", padx=(0, 8))
+        self.import_button = ttk_module.Button(
+            actions, text="Import proposal JSON…", command=self.import_proposal,
+        )
+        self.import_button.grid(row=0, column=2, sticky="w")
         ttk_module.Label(
             frame,
-            text="Export includes file and folder names. Review the JSON before sharing it with an AI.",
+            text="Exports and AI requests include file and folder names. Review before sharing. "
+                 "Paste the request into your AI chat, discuss revisions, then import its JSON reply.",
             wraplength=580, justify="left",
         ).grid(row=12, column=0, columnspan=2, sticky="w")
         root.protocol("WM_DELETE_WINDOW", self.close)
@@ -357,10 +394,69 @@ class FolderSelectionView:
             checkbox.configure(state="disabled" if busy else "normal")
         self.scan_button.configure(state="normal" if self.controller.can_scan else "disabled")
         self.export_button.configure(state="normal" if self.controller.can_export else "disabled")
+        for button in (self.request_button, self.import_button):
+            button.configure(state="normal" if self.controller.can_propose else "disabled")
+        if self._preview_proposal is not self.controller.proposal:
+            self._close_proposal_preview()
         self.status_label.configure(text=self.controller.status)
         self.results_label.configure(text="\n".join(self.controller.result_rows))
         self.summary_label.configure(text="\n".join(self.controller.summary_lines))
         self.hierarchy_view.show(self.controller.inventory, self.controller.hierarchy)
+
+    def _close_proposal_preview(self) -> None:
+        if self._proposal_preview is not None:
+            self._proposal_preview.close()
+        self._proposal_preview = self._preview_proposal = None
+
+    def copy_ai_request(self) -> None:
+        if self._closed or not self.controller.can_propose:
+            return
+        try:
+            request = self.controller.ai_request()
+        except ValueError as error:
+            self.controller.status = f"Request not copied: {error}"
+        else:
+            try:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(request)
+            except Exception:
+                self.controller.status = "Clipboard unavailable. Try copying the request again."
+            else:
+                self.controller.status = "AI request copied with inventory. Review it, then paste into your AI chat."
+        self._render()
+
+    def import_proposal(self) -> None:
+        if self._closed or not self.controller.can_propose:
+            return
+        if self._open_dialog is None:
+            from tkinter import filedialog
+
+            dialog = filedialog.askopenfilename
+        else:
+            dialog = self._open_dialog
+        try:
+            source = dialog(
+                parent=self.root, title="Import AI proposal JSON",
+                filetypes=[("JSON files", "*.json")],
+            )
+            if not source or self._closed:
+                return
+            self.controller.import_proposal(Path(source))
+        except OSError:
+            self.controller.status = "Proposal not imported. Select a readable regular JSON file."
+        except ValueError as error:
+            self.controller.status = f"Proposal not imported: {error}"
+        else:
+            self._close_proposal_preview()
+            try:
+                self._proposal_preview = self._preview_factory(self.root, self.controller.proposal)
+            except Exception:
+                self.controller.proposal = None
+                self.controller.status = "The proposal window could not open. Try importing it again."
+            else:
+                self._preview_proposal = self.controller.proposal
+                self.controller.status = "Proposal imported for preview. No files moved."
+        self._render()
 
     def save_inventory(self) -> None:
         if self._closed or not self.controller.can_export:
@@ -419,6 +515,7 @@ class FolderSelectionView:
             self._after_id = None
         self.controller.close()
         self.hierarchy_view.close()
+        self._close_proposal_preview()
         self.root.destroy()
 
 

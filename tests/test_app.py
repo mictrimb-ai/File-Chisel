@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import unittest
 from pathlib import Path
@@ -23,6 +24,7 @@ from file_chisel.folder_selection import (
 )
 from file_chisel.scanner import FileSystemEntry
 from file_chisel.hierarchy import build_hierarchy
+from tests.test_proposal import sample_proposal
 
 
 class ControlledThread:
@@ -45,6 +47,7 @@ class FakeRoot:
         self.owner = threading.get_ident()
         self.callbacks = {}
         self.next_id = 0
+        self.clipboard = ""
 
     def assert_live(self):
         if self.destroyed:
@@ -56,6 +59,14 @@ class FakeRoot:
         self.assert_live()
 
     minsize = columnconfigure = rowconfigure = protocol = mainloop = title
+
+    def clipboard_clear(self):
+        self.assert_live()
+        self.clipboard = ""
+
+    def clipboard_append(self, text):
+        self.assert_live()
+        self.clipboard += text
 
     def after(self, delay, callback):
         self.assert_live()
@@ -153,6 +164,22 @@ class FakeTreeview(FakeWidget):
         self.bindings["<<TreeviewOpen>>"](SimpleNamespace(widget=self))
         self.item(item, open=True)
 
+    def selection(self):
+        self.root.assert_live()
+        return (self.focused,) if self.focused else ()
+
+
+class FakeText(FakeWidget):
+    yview = FakeWidget.grid
+
+    def insert(self, index, text):
+        self.root.assert_live()
+        self.options["text"] = text
+
+    def delete(self, *args):
+        self.root.assert_live()
+        self.options["text"] = ""
+
 
 class FakeVariable:
     def __init__(self, *, master, value):
@@ -168,7 +195,7 @@ class FakeVariable:
         self.value = value
 
 
-FAKE_TK = SimpleNamespace(BooleanVar=FakeVariable)
+FAKE_TK = SimpleNamespace(BooleanVar=FakeVariable, Text=FakeText)
 FAKE_TTK = SimpleNamespace(
     Frame=FakeWidget, Label=FakeWidget, Checkbutton=FakeWidget, Button=FakeWidget,
     Treeview=FakeTreeview, Scrollbar=FakeWidget,
@@ -341,6 +368,128 @@ class ApplicationTests(unittest.TestCase):
         self.assertFalse(self.controller.can_export)
         with self.assertRaises(ValueError):
             self.controller.export_to(Path("/unused/export.json"))
+
+    def test_proposal_actions_require_a_successful_idle_scan(self):
+        self.assertFalse(self.controller.can_propose)
+        with self.assertRaises(ValueError):
+            self.controller.ai_request()
+        with self.assertRaises(ValueError):
+            self.controller.import_proposal(Path("/not-opened.json"))
+        root, view = self.make_view()
+        self.assertEqual(view.request_button.options["state"], "disabled")
+        self.assertEqual(view.import_button.options["state"], "disabled")
+        self.scanner.side_effect = OSError("failed")
+        self.controller.set_selected("documents", True)
+        view.start_scan()
+        self.workers[-1].finish()
+        root.fire_next()
+        self.assertTrue(self.controller.can_export)
+        self.assertFalse(self.controller.can_propose)
+        view.copy_ai_request()
+        self.assertEqual(root.clipboard, "")
+
+    def test_copy_ai_request_contains_snapshot_without_scanning_or_sending_it(self):
+        self.scanner.return_value = [self.record("/fixture/Documents/report.txt")]
+        root, view = self.scan_in_view(["documents"])
+        view.request_button.options["command"]()
+        self.assertIn('"relative_path": "report.txt"', root.clipboard)
+        self.assertNotIn("/fixture", root.clipboard)
+        self.assertIn("AI request copied", view.status_label.options["text"])
+        self.assertEqual(view.import_button.options["state"], "normal")
+        self.scanner.assert_called_once()
+        with mock.patch.object(root, "clipboard_append", side_effect=RuntimeError("unavailable")):
+            view.copy_ai_request()
+        self.assertIn("Clipboard unavailable", self.controller.status)
+        self.assertTrue(self.controller.can_propose)
+
+    def test_proposal_import_cancel_replacement_and_failure_keep_the_app_usable(self):
+        self.scanner.return_value = [self.record("/fixture/Documents/report.txt")]
+        root, view = self.scan_in_view(["documents"])
+        snapshot = self.controller.inventory
+        preview_one, preview_two = mock.Mock(), mock.Mock()
+        factory = mock.Mock(side_effect=[preview_one, preview_two])
+        view._preview_factory = factory
+        view._open_dialog = mock.Mock(return_value="")
+        with mock.patch("file_chisel.app.load_proposal", side_effect=AssertionError("cancel read a file")):
+            view.import_proposal()
+        factory.assert_not_called()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "proposal.json"
+            document = sample_proposal(snapshot)
+            path.write_text(json.dumps(document), encoding="utf-8")
+            view._open_dialog.return_value = str(path)
+            view.import_button.options["command"]()
+            first = self.controller.proposal
+            self.assertIsNotNone(first)
+            factory.assert_called_once_with(root, first)
+            self.assertIn("No files moved", self.controller.status)
+            document["summary"] = "A revised AI explanation."
+            path.write_text(json.dumps(document), encoding="utf-8")
+            view.import_proposal()
+            preview_one.close.assert_called_once()
+            self.assertEqual(self.controller.proposal.summary, document["summary"])
+            path.write_text("not json", encoding="utf-8")
+            view.import_proposal()
+            preview_two.close.assert_called_once()
+            self.assertIsNone(self.controller.proposal)
+            self.assertIn("Proposal not imported", self.controller.status)
+            self.assertEqual(view.import_button.options["state"], "normal")
+            self.assertIs(self.controller.inventory, snapshot)
+        self.scanner.assert_called_once()
+
+    def test_proposal_preview_is_cleared_on_selection_scan_failure_and_close(self):
+        for action in ("selection", "scan", "start_failure", "close"):
+            with self.subTest(action=action):
+                self.scanner.return_value = [self.record("/fixture/Documents/report.txt")]
+                root, view = self.scan_in_view(["documents"])
+                preview = mock.Mock()
+                view._proposal_preview = preview
+                self.controller.proposal = view._preview_proposal = object()
+                if action == "selection":
+                    view.variables["desktop"].set(True)
+                    view._selection_changed("desktop")
+                elif action == "start_failure":
+                    with mock.patch("file_chisel.folder_selection.Thread") as thread:
+                        thread.return_value.start.side_effect = RuntimeError("cannot start")
+                        view.start_scan()
+                elif action == "scan":
+                    view.start_scan()
+                    self.assertEqual(view.import_button.options["state"], "disabled")
+                else:
+                    view.close()
+                    view.copy_ai_request()
+                    view.import_proposal()
+                self.assertIsNone(self.controller.proposal)
+                preview.close.assert_called_once()
+                if action == "scan":
+                    self.scanner.return_value = []
+                    self.workers[-1].finish()
+                    root.fire_next()
+                if action != "close":
+                    view.close()
+                # A fresh controller is required after closing the runner.
+                self.runner = FolderScanRunner(FolderScanCoordinator(Path("/fixture"), self.scanner))
+                self.controller = ApplicationController(runner=self.runner)
+                self.addCleanup(self.controller.close)
+
+    def test_preview_window_failure_allows_retry(self):
+        self.scanner.return_value = [self.record("/fixture/Documents/report.txt")]
+        root, view = self.scan_in_view(["documents"])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "proposal.json"
+            path.write_text(json.dumps(sample_proposal(self.controller.inventory)), encoding="utf-8")
+            view._open_dialog = mock.Mock(return_value=str(path))
+            preview = mock.Mock()
+            view._preview_factory = mock.Mock(side_effect=[RuntimeError("window unavailable"), preview])
+            view.import_proposal()
+            self.assertIn("window could not open", self.controller.status)
+            self.assertIsNone(self.controller.proposal)
+            self.assertEqual(view.import_button.options["state"], "normal")
+            view.import_proposal()
+            self.assertIsNotNone(self.controller.proposal)
+            self.assertIn("imported for preview", self.controller.status)
+        view.close()
+        preview.close.assert_called_once()
 
     def test_gui_export_cancel_new_file_and_existing_file(self):
         import tempfile
