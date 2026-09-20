@@ -31,7 +31,7 @@ Status key: ✅ Complete | 📍 Current | ⬜ Not started
 
 ## Phase 4 — Reorganization Planner 📍
 
-- [ ] Generate a proposed folder structure
+- [x] Generate a proposed folder structure
 - [ ] Produce an exact move plan
 - [ ] Detect conflicts and unsafe operations
 - [ ] Explain the reasoning behind the proposal
