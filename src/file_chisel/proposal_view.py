@@ -3,6 +3,7 @@
 from collections import deque
 
 from file_chisel.move_plan import build_move_plan
+from file_chisel.move_safety import assess_move_plan
 from file_chisel.proposal import FolderProposal, ProposalLocation
 
 
@@ -30,19 +31,44 @@ class ProposalPreview:
         self._details = {}
         self._children = {}
         plan = build_move_plan(proposal)
+        safety = assess_move_plan(plan, proposal)
+        findings_by_target = {}
+        for finding in safety.findings:
+            findings_by_target.setdefault(finding.destination, []).append(finding)
+        cycle_sources = {source for cycle in safety.cycles for source in cycle}
+
+        def safety_notes(destination, source=None):
+            notes = "".join(
+                f"  Safety {finding.kind}: {finding.explanation}\n"
+                for finding in findings_by_target.get(destination, ())
+            )
+            if source in cycle_sources:
+                notes += "  Safety cycle: A temporary holding location and safe sequence are needed.\n"
+            return notes
+
         self._plan_rows = deque(
             f"Create folder: {item.destination.root}/{item.destination.relative_path}\n"
             f"{_format_reason(item.reason)}\n"
+            f"{safety_notes(item.destination)}"
             for item in plan.folders
         )
         self._plan_rows.extend(
             f"Move file: {item.source.root}/{item.source.relative_path} → "
             f"{item.destination.root}/{item.destination.relative_path}\n"
             f"{_format_reason(item.reason)}\n"
+            f"{safety_notes(item.destination, item.source)}"
             for item in plan.moves
         )
+        safety_header = (
+            f"Scanned-snapshot safety: {safety.conflict_count} conflicts, "
+            f"{safety.dependency_count} ordering dependencies, "
+            f"{len(safety.cycles)} move cycles.\n"
+            "Current filesystem not verified. This is not a safe execution order.\n"
+        )
         if not self._plan_rows:
-            self._plan_rows.append("No folder creations or file moves proposed.\n")
+            self._plan_rows.append(safety_header + "No folder creations or file moves proposed.\n")
+        else:
+            self._plan_rows[0] = safety_header + self._plan_rows[0]
         for node in proposal.nodes:
             self._children.setdefault(node.location.parent, []).append(node)
 
@@ -58,7 +84,7 @@ class ProposalPreview:
             row=0, column=0, columnspan=2, sticky="w",
         )
         ttk_module.Label(
-            frame, text="Preview only. No files moved. Conflict checks, safe sequencing, and simulation are still required.",
+            frame, text="Preview only. No files moved. Current filesystem checks, safe sequencing, and simulation are still required.",
             wraplength=700, justify="left",
         ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 8))
         summary = ttk_module.Frame(frame)

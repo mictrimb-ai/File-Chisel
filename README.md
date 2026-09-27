@@ -46,6 +46,9 @@ starting another scan, or closing the app clears the proposal.
 The proposal window also lists the exact requested changes: folders to create
 and file source-to-destination moves, with AI-supplied reasons. It omits entries
 that stay in place. The file moves are sorted for review, not safe execution order.
+The same view flags destinations occupied in the scanned snapshot, dependencies
+between moves, and cycles such as two files swapping places. It always marks the
+current filesystem as unverified. No action is approved or executed by this check.
 
 This first version supports new folders and regular-file placements between
 successfully scanned roots. Unmentioned entries stay in place. Existing folders,

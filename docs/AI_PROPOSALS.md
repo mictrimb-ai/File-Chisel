@@ -81,5 +81,11 @@ two files exchanging destinations need a safe operation sequence despite having
 an unambiguous final hierarchy. Current filesystem changes, permissions, links,
 and filesystem-specific naming rules must be checked by later conflict detection
 and simulation before execution is offered.
+The preview assesses the scanned snapshot for destinations already occupied by
+unchanged entries, duplicate action targets, destinations that another move must
+vacate first, and move cycles. Accepted JSON proposals already reject final
+destination collisions during import. A snapshot finding describes a known
+planning hazard; no finding does not certify safety. The app does not recheck the
+current filesystem, choose temporary holding locations, or sequence actions.
 Proposals are held in memory; keep the returned JSON to import it again after a
 new matching scan. A new scan always clears the displayed proposal.
