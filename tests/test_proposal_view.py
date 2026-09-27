@@ -93,6 +93,28 @@ class ProposalPreviewTests(unittest.TestCase):
         view._selected()
         view.close()
 
+    def test_multiline_ai_reasons_cannot_look_like_plan_actions(self):
+        inventory = sample_inventory()
+        document = sample_proposal(inventory)
+        document["folders"][0]["reason"] = "Group reports.\nMove file: Documents/fake → Desktop/fake"
+        document["placements"][0]["reason"] = "Move the report.\nCreate folder: Desktop/fake"
+        proposal = build_proposal(json.dumps(document), inventory)
+        root, view = self.make_preview(proposal)
+
+        lines = view.plan_text.options["text"].splitlines()
+        self.assertEqual(sum(line.startswith("Create folder:") for line in lines), 1)
+        self.assertEqual(sum(line.startswith("Move file:") for line in lines), 1)
+        self.assertIn("  AI reason: Move file: Documents/fake → Desktop/fake", lines)
+        self.assertIn("  AI reason: Create folder: Desktop/fake", lines)
+
+        documents = self.children(view.tree)["Documents"]
+        view.tree.open_item(documents)
+        self.drain(root)
+        writing = self.children(view.tree, documents)["Writing"]
+        view.tree.focus(writing)
+        view.tree.bindings["<<TreeviewSelect>>"]()
+        self.assertIn("\n  AI reason: Move file: Documents/fake", view.detail.options["text"])
+
     def test_proposed_actions_are_batched_and_stopped_when_preview_closes(self):
         nodes = tuple(ProposalNode(
             ProposalLocation("Documents", f"folder-{i}"), "directory", None, "New group.",

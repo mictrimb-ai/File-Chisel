@@ -6,6 +6,12 @@ from file_chisel.move_plan import build_move_plan
 from file_chisel.proposal import FolderProposal, ProposalLocation
 
 
+def _format_reason(reason: str) -> str:
+    """Keep each line of AI text visibly separate from plan actions."""
+
+    return "\n".join(f"  AI reason: {line}" for line in reason.splitlines())
+
+
 class ProposalPreview:
     """Expand the proposed snapshot in small GUI batches, without filesystem reads."""
 
@@ -26,13 +32,13 @@ class ProposalPreview:
         plan = build_move_plan(proposal)
         self._plan_rows = deque(
             f"Create folder: {item.destination.root}/{item.destination.relative_path}\n"
-            f"  AI reason: {item.reason}\n"
+            f"{_format_reason(item.reason)}\n"
             for item in plan.folders
         )
         self._plan_rows.extend(
             f"Move file: {item.source.root}/{item.source.relative_path} → "
             f"{item.destination.root}/{item.destination.relative_path}\n"
-            f"  AI reason: {item.reason}\n"
+            f"{_format_reason(item.reason)}\n"
             for item in plan.moves
         )
         if not self._plan_rows:
@@ -159,7 +165,7 @@ class ProposalPreview:
             self._add(
                 parent, node.location, node.entry_type, node.status,
                 f"Source: {source}\nProposed: {node.location.root}/{node.location.relative_path}\n"
-                f"{node.reason}",
+                + _format_reason(node.reason),
             )
             self._pending.append((parent, children, placeholder))
         self._schedule()
