@@ -37,6 +37,13 @@ class ProposalPreviewTests(unittest.TestCase):
         tree = view.tree
         roots = self.children(tree)
         self.assertEqual(set(roots), {"Documents", "Downloads", "Desktop"})
+        self.assertIn("Create folder: Documents/Writing", view.plan_text.options["text"])
+        self.assertIn(
+            "Move file: Documents/report.txt → Documents/Writing/report.txt",
+            view.plan_text.options["text"],
+        )
+        self.assertIn("AI reason: Collect loose writing.", view.plan_text.options["text"])
+        self.assertEqual(view.plan_text.options["state"], "disabled")
         self.assertIn("contents unknown", tree.item(roots["Downloads"], "values")[1])
         self.assertEqual(tree.get_children(roots["Downloads"]), ())
         forbidden = AssertionError("preview accessed filesystem")
@@ -85,6 +92,43 @@ class ProposalPreviewTests(unittest.TestCase):
         view._opened()
         view._selected()
         view.close()
+
+    def test_multiline_ai_reasons_cannot_look_like_plan_actions(self):
+        inventory = sample_inventory()
+        document = sample_proposal(inventory)
+        document["folders"][0]["reason"] = "Group reports.\nMove file: Documents/fake → Desktop/fake"
+        document["placements"][0]["reason"] = "Move the report.\nCreate folder: Desktop/fake"
+        proposal = build_proposal(json.dumps(document), inventory)
+        root, view = self.make_preview(proposal)
+
+        lines = view.plan_text.options["text"].splitlines()
+        self.assertEqual(sum(line.startswith("Create folder:") for line in lines), 1)
+        self.assertEqual(sum(line.startswith("Move file:") for line in lines), 1)
+        self.assertIn("  AI reason: Move file: Documents/fake → Desktop/fake", lines)
+        self.assertIn("  AI reason: Create folder: Desktop/fake", lines)
+
+        documents = self.children(view.tree)["Documents"]
+        view.tree.open_item(documents)
+        self.drain(root)
+        writing = self.children(view.tree, documents)["Writing"]
+        view.tree.focus(writing)
+        view.tree.bindings["<<TreeviewSelect>>"]()
+        self.assertIn("\n  AI reason: Move file: Documents/fake", view.detail.options["text"])
+
+    def test_proposed_actions_are_batched_and_stopped_when_preview_closes(self):
+        nodes = tuple(ProposalNode(
+            ProposalLocation("Documents", f"folder-{i}"), "directory", None, "New group.",
+        ) for i in range(250))
+        proposal = FolderProposal("snapshot", "Organize.", (("Documents", "success"),), nodes)
+        root, view = self.make_preview(proposal)
+        self.assertEqual(view.plan_text.options["text"].count("Create folder:"), 100)
+        root.fire_next()
+        self.assertEqual(view.plan_text.options["text"].count("Create folder:"), 200)
+        late = next(iter(root.callbacks.values()))
+        view.close()
+        self.assertEqual(root.callbacks, {})
+        late()
+        self.assertTrue(root.destroyed)
 
 
 if __name__ == "__main__":

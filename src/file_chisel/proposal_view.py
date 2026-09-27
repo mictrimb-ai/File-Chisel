@@ -2,7 +2,14 @@
 
 from collections import deque
 
+from file_chisel.move_plan import build_move_plan
 from file_chisel.proposal import FolderProposal, ProposalLocation
+
+
+def _format_reason(reason: str) -> str:
+    """Keep each line of AI text visibly separate from plan actions."""
+
+    return "\n".join(f"  AI reason: {line}" for line in reason.splitlines())
 
 
 class ProposalPreview:
@@ -17,15 +24,30 @@ class ProposalPreview:
         self.root = root
         self._closed = False
         self._after_id = None
+        self._plan_after_id = None
         self._pending = deque()
         self._unopened = {}
         self._details = {}
         self._children = {}
+        plan = build_move_plan(proposal)
+        self._plan_rows = deque(
+            f"Create folder: {item.destination.root}/{item.destination.relative_path}\n"
+            f"{_format_reason(item.reason)}\n"
+            for item in plan.folders
+        )
+        self._plan_rows.extend(
+            f"Move file: {item.source.root}/{item.source.relative_path} → "
+            f"{item.destination.root}/{item.destination.relative_path}\n"
+            f"{_format_reason(item.reason)}\n"
+            for item in plan.moves
+        )
+        if not self._plan_rows:
+            self._plan_rows.append("No folder creations or file moves proposed.\n")
         for node in proposal.nodes:
             self._children.setdefault(node.location.parent, []).append(node)
 
         root.title("File Chisel — Proposed folder structure")
-        root.minsize(760, 520)
+        root.minsize(760, 660)
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)
         frame = ttk_module.Frame(root, padding=16)
@@ -36,7 +58,7 @@ class ProposalPreview:
             row=0, column=0, columnspan=2, sticky="w",
         )
         ttk_module.Label(
-            frame, text="Preview only. No files moved. Move planning and filesystem safety checks are still required.",
+            frame, text="Preview only. No files moved. Conflict checks, safe sequencing, and simulation are still required.",
             wraplength=700, justify="left",
         ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 8))
         summary = ttk_module.Frame(frame)
@@ -74,6 +96,22 @@ class ProposalPreview:
         self.detail.configure(yscrollcommand=detail_scroll.set)
         self.detail.grid(row=0, column=0, sticky="ew")
         detail_scroll.grid(row=0, column=1, sticky="ns")
+
+        ttk_module.Label(
+            frame,
+            text=(f"Proposed actions: {len(plan.folders)} folders to create, "
+                  f"{len(plan.moves)} files to move. Listed for review, not execution order."),
+            wraplength=700, justify="left",
+        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(8, 4))
+        plan_frame = ttk_module.Frame(frame)
+        plan_frame.grid(row=7, column=0, columnspan=2, sticky="ew")
+        plan_frame.columnconfigure(0, weight=1)
+        self.plan_text = tk_module.Text(plan_frame, height=6, wrap="word")
+        plan_scroll = ttk_module.Scrollbar(plan_frame, orient="vertical", command=self.plan_text.yview)
+        self.plan_text.configure(yscrollcommand=plan_scroll.set)
+        self.plan_text.grid(row=0, column=0, sticky="ew")
+        plan_scroll.grid(row=0, column=1, sticky="ns")
+        self._insert_plan_batch()
 
         self.tree.bind("<<TreeviewOpen>>", self._opened)
         self.tree.bind("<<TreeviewSelect>>", self._selected)
@@ -127,7 +165,7 @@ class ProposalPreview:
             self._add(
                 parent, node.location, node.entry_type, node.status,
                 f"Source: {source}\nProposed: {node.location.root}/{node.location.relative_path}\n"
-                f"{node.reason}",
+                + _format_reason(node.reason),
             )
             self._pending.append((parent, children, placeholder))
         self._schedule()
@@ -142,6 +180,18 @@ class ProposalPreview:
             self.detail.insert("1.0", self._details.get(selected[0], "Expand the folder to load its entries."))
             self.detail.configure(state="disabled")
 
+    def _insert_plan_batch(self):
+        if self._closed:
+            return
+        self._plan_after_id = None
+        rows = [self._plan_rows.popleft() for _ in range(min(self.BATCH_SIZE, len(self._plan_rows)))]
+        if rows:
+            self.plan_text.configure(state="normal")
+            self.plan_text.insert("end", "".join(rows))
+            self.plan_text.configure(state="disabled")
+        if self._plan_rows:
+            self._plan_after_id = self.root.after(1, self._insert_plan_batch)
+
     def close(self):
         if self._closed:
             return
@@ -149,7 +199,11 @@ class ProposalPreview:
         if self._after_id is not None:
             self.root.after_cancel(self._after_id)
             self._after_id = None
+        if self._plan_after_id is not None:
+            self.root.after_cancel(self._plan_after_id)
+            self._plan_after_id = None
         self._pending.clear()
+        self._plan_rows.clear()
         self.root.destroy()
 
 
