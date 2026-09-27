@@ -139,3 +139,15 @@ Status key: 📍 Active | ✅ Complete | ⛔ Blocked
 - Review: Codex's policy finding was addressed, its thread was resolved, and a review of `5a3ac93` found no major issues.
 - Scope: the preview proposes new folders and regular-file placements among successfully scanned roots; existing folders remain in place. Exact move planning, conflict checks, simulation, and execution remain future work.
 - Result: merged into `main`; feature branch deleted locally and on GitHub; the first Phase 4 roadmap item is complete.
+
+### Parker / ALPHA — Exact Move Plan Preview
+
+- Feature branch: `feature/exact-move-plan`
+- Contribution: ALPHA added a read-only list of proposed folder creations and regular-file moves, showing each source, destination, and AI-supplied reason. Unchanged entries do not appear as actions.
+- Changed files: `README.md`, `docs/AI_PROPOSALS.md`, `src/file_chisel/move_plan.py`, `src/file_chisel/proposal_view.py`, `tests/test_app.py`, `tests/test_move_plan.py`, `tests/test_proposal_view.py`
+- Feature commit: `1d1ae60`; review fix: `c2c51b7`; merge commit: `a32b7fa`
+- Pull request: [#19 — Show exact folder creations and file moves for AI proposals](https://github.com/mictrimb-ai/File-Chisel/pull/19)
+- Validation: 108 tests passed on Parker's macOS Python 3.14 feature branch and again on merged `main`.
+- Review: Codex found that a multiline AI reason could resemble an extra action. The fix labels every reason line in the plan and details; a new regression test passes, the finding was resolved, and Codex's follow-up review found no further major issues.
+- Safety boundary: this is a review list, not a safe execution sequence; conflict detection, simulation, and filesystem changes remain future work.
+- Result: merged into `main`; feature branch deleted locally and on GitHub; the second Phase 4 roadmap item is complete.
