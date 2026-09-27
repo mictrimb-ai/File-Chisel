@@ -115,6 +115,31 @@ class ProposalPreviewTests(unittest.TestCase):
         view.tree.bindings["<<TreeviewSelect>>"]()
         self.assertIn("\n  AI reason: Move file: Documents/fake", view.detail.options["text"])
 
+    def test_safety_preview_distinguishes_a_swap_from_an_ordered_chain(self):
+        inventory = sample_inventory()
+        document = sample_proposal(inventory)
+        document["folders"] = []
+        document["placements"] = [
+            {"source": {"root": "Documents", "relative_path": "report.txt"},
+             "destination": {"root": "Documents", "relative_path": "Projects/notes.txt"},
+             "reason": "Swap locations."},
+            {"source": {"root": "Documents", "relative_path": "Projects/notes.txt"},
+             "destination": {"root": "Documents", "relative_path": "report.txt"},
+             "reason": "Swap locations."},
+        ]
+        _, view = self.make_preview(build_proposal(json.dumps(document), inventory))
+        preview = view.plan_text.options["text"]
+        self.assertIn("0 conflicts, 2 ordering dependencies, 1 move cycles", preview)
+        self.assertIn("Current filesystem not verified", preview)
+        self.assertEqual(preview.count("Safety cycle:"), 2)
+        self.assertEqual(preview.count("Move file:"), 2)
+
+        document["placements"][1]["destination"]["relative_path"] = "Projects/archived.txt"
+        _, view = self.make_preview(build_proposal(json.dumps(document), inventory))
+        preview = view.plan_text.options["text"]
+        self.assertIn("0 conflicts, 1 ordering dependencies, 0 move cycles", preview)
+        self.assertNotIn("Safety cycle:", preview)
+
     def test_proposed_actions_are_batched_and_stopped_when_preview_closes(self):
         nodes = tuple(ProposalNode(
             ProposalLocation("Documents", f"folder-{i}"), "directory", None, "New group.",
