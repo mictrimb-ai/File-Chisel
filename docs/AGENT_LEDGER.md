@@ -151,3 +151,17 @@ Status key: 📍 Active | ✅ Complete | ⛔ Blocked
 - Review: Codex found that a multiline AI reason could resemble an extra action. The fix labels every reason line in the plan and details; a new regression test passes, the finding was resolved, and Codex's follow-up review found no further major issues.
 - Safety boundary: this is a review list, not a safe execution sequence; conflict detection, simulation, and filesystem changes remain future work.
 - Result: merged into `main`; feature branch deleted locally and on GitHub; the second Phase 4 roadmap item is complete.
+
+### Parker / ALPHA — Scanned-Snapshot Move Safety
+
+- Feature branch: `feature/move-plan-safety`
+- Parker's contribution: identified that a destination matching another move's source creates an ordering dependency.
+- Implementation: ALPHA added a read-only assessment of stationary occupants, duplicate action targets, dependencies, and move cycles, with findings beside the proposed actions.
+- Changed files: `README.md`, `docs/AI_PROPOSALS.md`, `src/file_chisel/move_safety.py`, `src/file_chisel/proposal_view.py`, `tests/test_move_safety.py`, `tests/test_proposal_view.py`
+- Feature commit: `bc34b4c`; merge commit: `06d092f`
+- Pull request: [#21 — Flag snapshot conflicts and move ordering hazards](https://github.com/mictrimb-ai/File-Chisel/pull/21)
+- Validation: 116 tests passed locally on Parker's macOS Python 3.14 feature branch and again on merged `main`.
+- Manual validation: an imported proposal displayed zero known snapshot conflicts, dependencies, and cycles, alongside an explicit warning that the current filesystem was unverified.
+- Review: Codex reacted with a thumbs-up; no review findings were reported before merging.
+- Safety boundary: this assessment neither inspects the current filesystem nor finds a safe execution order; live conflict checks, simulation, and execution remain future work.
+- Result: merged into `main`; feature branch deleted locally and on GitHub; the scanned-snapshot safety milestone is complete.
