@@ -43,6 +43,10 @@ revision replaces the earlier preview. Cancellation leaves the current preview
 alone; an invalid file clears it and reports the problem. Changing selections,
 starting another scan, or closing the app clears the proposal.
 
+The proposal window also lists the exact requested changes: folders to create
+and file source-to-destination moves, with AI-supplied reasons. It omits entries
+that stay in place. The file moves are sorted for review, not safe execution order.
+
 This first version supports new folders and regular-file placements between
 successfully scanned roots. Unmentioned entries stay in place. Existing folders,
 symbolic links, and other entry types are retained, and failed roots remain unknown.
@@ -50,5 +54,5 @@ Nothing is moved, created, deleted, or overwritten by proposal import or preview
 The explicitly chosen proposal JSON is read; scanned file contents remain unopened.
 
 See [the proposal format](docs/AI_PROPOSALS.md) for the contract and limits.
-Exact move planning, current-filesystem conflict checks, simulation, execution,
-and undo remain later work. AI reasons are suggestions, not verified facts.
+Current-filesystem conflict checks, safe operation sequencing, simulation,
+execution, and undo remain later work. AI reasons are suggestions, not verified facts.

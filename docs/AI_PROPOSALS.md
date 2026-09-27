@@ -72,10 +72,14 @@ file dialog is read. The app neither sends a network request nor executes text
 returned by AI. File and folder names are included in the copied request, just as
 in the JSON export, and should be reviewed before sharing.
 
-The preview represents a possible final hierarchy, not an executable move plan.
-For example, two files exchanging destinations can have an unambiguous final
-hierarchy but still need a safe operation sequence. Current filesystem changes,
-permissions, links, filesystem-specific naming rules, and operation sequencing
-must be checked by the later planner and simulator before execution is offered.
+The preview represents a possible final hierarchy and a read-only move plan.
+The plan lists new folders parent before child and lists each relocated regular
+file with its exact scanned source, proposed destination, and AI-supplied reason.
+Unchanged entries, including existing folders, do not become plan actions.
+File moves are sorted for review, not sequenced for execution. For example,
+two files exchanging destinations need a safe operation sequence despite having
+an unambiguous final hierarchy. Current filesystem changes, permissions, links,
+and filesystem-specific naming rules must be checked by later conflict detection
+and simulation before execution is offered.
 Proposals are held in memory; keep the returned JSON to import it again after a
 new matching scan. A new scan always clears the displayed proposal.

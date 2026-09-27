@@ -174,7 +174,10 @@ class FakeText(FakeWidget):
 
     def insert(self, index, text):
         self.root.assert_live()
-        self.options["text"] = text
+        if index == "end":
+            self.options["text"] = self.options.get("text", "") + text
+        else:
+            self.options["text"] = text
 
     def delete(self, *args):
         self.root.assert_live()

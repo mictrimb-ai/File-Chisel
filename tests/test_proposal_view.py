@@ -37,6 +37,13 @@ class ProposalPreviewTests(unittest.TestCase):
         tree = view.tree
         roots = self.children(tree)
         self.assertEqual(set(roots), {"Documents", "Downloads", "Desktop"})
+        self.assertIn("Create folder: Documents/Writing", view.plan_text.options["text"])
+        self.assertIn(
+            "Move file: Documents/report.txt → Documents/Writing/report.txt",
+            view.plan_text.options["text"],
+        )
+        self.assertIn("AI reason: Collect loose writing.", view.plan_text.options["text"])
+        self.assertEqual(view.plan_text.options["state"], "disabled")
         self.assertIn("contents unknown", tree.item(roots["Downloads"], "values")[1])
         self.assertEqual(tree.get_children(roots["Downloads"]), ())
         forbidden = AssertionError("preview accessed filesystem")
@@ -85,6 +92,21 @@ class ProposalPreviewTests(unittest.TestCase):
         view._opened()
         view._selected()
         view.close()
+
+    def test_proposed_actions_are_batched_and_stopped_when_preview_closes(self):
+        nodes = tuple(ProposalNode(
+            ProposalLocation("Documents", f"folder-{i}"), "directory", None, "New group.",
+        ) for i in range(250))
+        proposal = FolderProposal("snapshot", "Organize.", (("Documents", "success"),), nodes)
+        root, view = self.make_preview(proposal)
+        self.assertEqual(view.plan_text.options["text"].count("Create folder:"), 100)
+        root.fire_next()
+        self.assertEqual(view.plan_text.options["text"].count("Create folder:"), 200)
+        late = next(iter(root.callbacks.values()))
+        view.close()
+        self.assertEqual(root.callbacks, {})
+        late()
+        self.assertTrue(root.destroyed)
 
 
 if __name__ == "__main__":
