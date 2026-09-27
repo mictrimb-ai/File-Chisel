@@ -33,7 +33,7 @@ Status key: ✅ Complete | 📍 Current | ⬜ Not started
 
 - [x] Generate a proposed folder structure
 - [x] Produce an exact move plan
-- [ ] Detect conflicts and unsafe operations
+- [x] Detect conflicts and unsafe operations in the scanned snapshot
 - [ ] Explain the reasoning behind the proposal
 
 ## Phase 5 — Safe Simulation ⬜
