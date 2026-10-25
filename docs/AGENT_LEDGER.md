@@ -178,3 +178,16 @@ Status key: 📍 Active | ✅ Complete | ⛔ Blocked
 - Review: Codex completed its review of `5c7bdb7` with no findings.
 - Boundary: the app presents AI explanations as unverified suggestions. It does not read scanned file contents, recheck the current filesystem, simulate changes, or execute the proposal.
 - Result: merged into `main`; all four Phase 4 roadmap items are complete. Phase 5 simulation remains future work.
+
+### Parker / ALPHA — Scanned-Snapshot Simulation
+
+- Feature branch: `feature/simulate-move-plan`
+- Implementation: ALPHA added an in-memory replay that orders proposed folder creations and file moves against the scanned snapshot, checks each destination and parent when its step runs, and compares the result with the proposal.
+- Parker's contribution: challenged the first version's limited value, prompting the revised numbered step order; confirmed that the steps appeared in the macOS preview.
+- Changed files: `README.md`, `docs/AI_PROPOSALS.md`, `src/file_chisel/proposal_view.py`, `src/file_chisel/simulation.py`, `tests/test_proposal_view.py`, `tests/test_simulation.py`
+- First feature commit: `c67443a`; revised step-order commit: `7c17d45`; merge commit: `d35f259`
+- Pull request: [#25 — Order and simulate proposed moves in the scanned snapshot](https://github.com/mictrimb-ai/File-Chisel/pull/25)
+- Validation: 125 tests passed in the implementation workspace, on Parker's macOS feature branch, and again on merged `main` in both environments.
+- Review: Codex completed its review of `7c17d45` with no findings.
+- Boundary: the step order uses an in-memory copy of the scan. Current disk state, permissions, and filesystem rules remain unverified; no files or folders are changed. Cycles needing an unplanned holding step are blocked.
+- Result: merged into `main`; the first Phase 5 roadmap item is complete for the scanned snapshot. Live validation and remaining simulation safeguards are future work.
