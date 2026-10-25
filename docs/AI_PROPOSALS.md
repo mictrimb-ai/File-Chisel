@@ -75,6 +75,9 @@ in the JSON export, and should be reviewed before sharing.
 The preview represents a possible final hierarchy and a read-only move plan.
 The plan lists new folders parent before child and lists each relocated regular
 file with its exact scanned source, proposed destination, and AI-supplied reason.
+It also shows the scanned regular file size and whether the destination parent
+was present in the snapshot or is a newly proposed folder. These are metadata
+facts, while the AI's reason and overall explanation remain unverified suggestions.
 Unchanged entries, including existing folders, do not become plan actions.
 File moves are sorted for review, not sequenced for execution. For example,
 two files exchanging destinations need a safe operation sequence despite having

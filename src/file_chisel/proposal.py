@@ -71,6 +71,7 @@ class ProposalNode:
     entry_type: str
     source: ProposalLocation | None
     reason: str
+    source_size: int | None = None
 
     @property
     def status(self) -> str:
@@ -210,7 +211,10 @@ def build_proposal(text: str, inventory: ScanInventory) -> FolderProposal:
         location = ProposalLocation(entry["root"], entry["relative_path"])
         if location in current:
             raise ValueError("The inventory contains repeated locations.")
-        current[location] = ProposalNode(location, entry["type"], location, "Not changed by the proposal.")
+        current[location] = ProposalNode(
+            location, entry["type"], location, "Not changed by the proposal.",
+            entry["size"] if entry["type"] == "file" else None,
+        )
 
     placed = {}
     for record in proposal["placements"]:
@@ -221,7 +225,10 @@ def build_proposal(text: str, inventory: ScanInventory) -> FolderProposal:
             raise ValueError("Each placement must reference a scanned regular file.")
         if source in placed:
             raise ValueError("Each source file may appear only once.")
-        placed[source] = ProposalNode(destination, "file", source, _text(item["reason"], "A reason"))
+        placed[source] = ProposalNode(
+            destination, "file", source, _text(item["reason"], "A reason"),
+            current[source].source_size,
+        )
 
     nodes = [placed.get(location, node) for location, node in current.items()]
     for record in proposal["folders"]:
