@@ -87,7 +87,7 @@ class ProposalPreview:
             f"Scanned-snapshot safety: {safety.conflict_count} conflicts, "
             f"{safety.dependency_count} ordering dependencies, "
             f"{len(safety.cycles)} move cycles.\n"
-            "Current filesystem not verified. This is not a safe execution order.\n"
+            "Current filesystem not verified. The review list is not an execution order.\n"
             "AI reasons are suggestions; scanned file contents were not read.\n"
         )
         if self.simulation.blocked:
@@ -99,13 +99,22 @@ class ProposalPreview:
         else:
             safety_header += (
                 f"Scanned-snapshot simulation: {self.simulation.folder_count} folder(s) "
-                f"and {self.simulation.move_count} file move(s) replayed in memory. "
+                f"and {self.simulation.move_count} file move(s) replayed in memory in order. "
                 "Result matches the proposal; original snapshot preserved.\n"
             )
         if not self._plan_rows:
             self._plan_rows.append(safety_header + "No folder creations or file moves proposed.\n")
         else:
             self._plan_rows[0] = safety_header + self._plan_rows[0]
+        if not self.simulation.blocked and self.simulation.steps:
+            self._plan_rows.append("\nScanned-snapshot step order (current disk unverified):\n")
+            self._plan_rows.extend(
+                f"{index}. Create folder {step.destination.root}/{step.destination.relative_path}\n"
+                if step.source is None else
+                f"{index}. Move {step.source.root}/{step.source.relative_path} → "
+                f"{step.destination.root}/{step.destination.relative_path}\n"
+                for index, step in enumerate(self.simulation.steps, 1)
+            )
         for node in proposal.nodes:
             self._children.setdefault(node.location.parent, []).append(node)
 

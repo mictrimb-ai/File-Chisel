@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from heapq import heappop, heappush
 from dataclasses import dataclass, replace
 
 from file_chisel.move_plan import MovePlan, build_move_plan
@@ -20,11 +21,21 @@ class SimulatedEntry:
 
 
 @dataclass(frozen=True)
+class SimulationStep:
+    """One step that is possible in the copied scan state at that moment."""
+
+    kind: str  # "create_folder" or "move_file"
+    source: ProposalLocation | None
+    destination: ProposalLocation
+
+
+@dataclass(frozen=True)
 class SimulationResult:
-    """A logical outcome, never a sequence of filesystem operations."""
+    """A snapshot-only order; current disk conditions are still unknown."""
 
     original: tuple[SimulatedEntry, ...]
     resulting: tuple[SimulatedEntry, ...] | None
+    steps: tuple[SimulationStep, ...]
     blocked_reasons: tuple[str, ...]
     folder_count: int
     move_count: int
@@ -39,10 +50,10 @@ def _ordered(entries) -> tuple[SimulatedEntry, ...]:
 
 
 def simulate_move_plan(plan: MovePlan, proposal: FolderProposal) -> SimulationResult:
-    """Replay all actions atomically on copied metadata and compare the result.
+    """Order and replay all actions on copied metadata, then compare the result.
 
-    This models final locations only. It cannot certify a safe operation order or
-    say whether anything has changed on the real disk since the scan.
+    A step only runs after its destination is vacated and its parent exists as
+    a directory in the copy. This order is not certified for the real disk.
     """
 
     if plan != build_move_plan(proposal):
@@ -62,31 +73,98 @@ def simulate_move_plan(plan: MovePlan, proposal: FolderProposal) -> SimulationRe
     if safety.cycles:
         reasons.append(f"{len(safety.cycles)} move cycle(s) needing an unplanned holding step")
     if reasons:
-        return SimulationResult(original, None, tuple(reasons), len(plan.folders), len(plan.moves))
+        return SimulationResult(original, None, (), tuple(reasons), len(plan.folders), len(plan.moves))
 
-    working = {entry.location: entry for entry in original}
-    moved = {}
-    for move in plan.moves:
-        try:
-            moved[move.source] = working.pop(move.source)
-        except KeyError as error:
-            raise ValueError("A move source is missing from the scanned snapshot.") from error
+    actions = tuple(
+        SimulationStep("create_folder", None, folder.destination)
+        for folder in plan.folders
+    ) + tuple(
+        SimulationStep("move_file", move.source, move.destination)
+        for move in plan.moves
+    )
+    original_keys = {_path_key(entry.location) for entry in original}
+    folder_targets = {
+        _path_key(action.destination): index for index, action in enumerate(actions)
+        if action.kind == "create_folder"
+    }
+    moving_sources = {
+        _path_key(action.source): index for index, action in enumerate(actions)
+        if action.kind == "move_file"
+    }
+    dependencies: list[set[int]] = []
+    dependents: list[list[int]] = [[] for _ in actions]
+    for index, action in enumerate(actions):
+        needs = set()
+        parent = action.destination.parent
+        if parent.relative_path and _path_key(parent) in folder_targets:
+            needs.add(folder_targets[_path_key(parent)])
+        destination_key = _path_key(action.destination)
+        if destination_key in original_keys and destination_key in moving_sources:
+            needs.add(moving_sources[destination_key])
+        dependencies.append(needs)
+        for earlier in needs:
+            dependents[earlier].append(index)
 
-    for folder in plan.folders:
-        working[folder.destination] = SimulatedEntry(None, folder.destination, "directory", None)
-    for move in plan.moves:
-        working[move.destination] = replace(moved[move.source], location=move.destination)
+    remaining = [len(needs) for needs in dependencies]
+    ready = []
+    for index, count in enumerate(remaining):
+        if count == 0:
+            heappush(ready, index)
+
+    working = {_path_key(entry.location): entry for entry in original}
+    steps = []
+    while ready:
+        index = heappop(ready)
+        action = actions[index]
+        destination_key = _path_key(action.destination)
+        parent = action.destination.parent
+        if parent.relative_path:
+            parent_entry = working.get(_path_key(parent))
+            if (parent_entry is None or parent_entry.entry_type != "directory"
+                    or parent_entry.location != parent):
+                return SimulationResult(
+                    original, None, (), ("a destination parent is unavailable",),
+                    len(plan.folders), len(plan.moves),
+                )
+        if destination_key in working:
+            return SimulationResult(
+                original, None, (), ("a destination is still occupied",),
+                len(plan.folders), len(plan.moves),
+            )
+        if action.kind == "create_folder":
+            working[destination_key] = SimulatedEntry(None, action.destination, "directory", None)
+        else:
+            source_key = _path_key(action.source)
+            source_entry = working.get(source_key)
+            if source_entry is None or source_entry.location != action.source:
+                return SimulationResult(
+                    original, None, (), ("a move source is unavailable",),
+                    len(plan.folders), len(plan.moves),
+                )
+            del working[source_key]
+            working[destination_key] = replace(source_entry, location=action.destination)
+        steps.append(action)
+        for later in dependents[index]:
+            remaining[later] -= 1
+            if remaining[later] == 0:
+                heappush(ready, later)
+
+    if len(steps) != len(actions):
+        return SimulationResult(
+            original, None, (), ("ordering cycle needs an unplanned holding step",),
+            len(plan.folders), len(plan.moves),
+        )
 
     resulting = _ordered(working.values())
-    if len({_path_key(entry.location) for entry in resulting}) != len(resulting):
-        raise ValueError("The simulated hierarchy contains colliding locations.")
     successful_roots = {name for name, status in proposal.roots if status == "success"}
     for entry in resulting:
         if entry.location.root not in successful_roots:
             raise ValueError("The simulated hierarchy references an unscanned root.")
         parent = entry.location.parent
         if parent.relative_path and (
-            parent not in working or working[parent].entry_type != "directory"
+            _path_key(parent) not in working
+            or working[_path_key(parent)].entry_type != "directory"
+            or working[_path_key(parent)].location != parent
         ):
             raise ValueError("The simulated hierarchy has a missing or non-directory parent.")
     expected = _ordered(
@@ -96,4 +174,4 @@ def simulate_move_plan(plan: MovePlan, proposal: FolderProposal) -> SimulationRe
     if resulting != expected or len(working) != len(expected):
         raise ValueError("The move plan does not reproduce the proposed hierarchy.")
 
-    return SimulationResult(original, resulting, (), len(plan.folders), len(plan.moves))
+    return SimulationResult(original, resulting, tuple(steps), (), len(plan.folders), len(plan.moves))

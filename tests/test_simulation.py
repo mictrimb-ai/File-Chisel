@@ -31,6 +31,7 @@ class SimulationTests(unittest.TestCase):
 
         self.assertFalse(result.blocked)
         self.assertEqual((result.folder_count, result.move_count), (1, 1))
+        self.assertEqual([step.kind for step in result.steps], ["create_folder", "move_file"])
         original = {entry.location: entry for entry in result.original}
         resulting = {entry.location: entry for entry in result.resulting}
         report = ProposalLocation("Documents", "report.txt")
@@ -49,6 +50,11 @@ class SimulationTests(unittest.TestCase):
         result = simulate_move_plan(plan, proposal)
 
         self.assertFalse(result.blocked)
+        self.assertEqual(
+            [(step.source.relative_path, step.destination.relative_path)
+             for step in result.steps],
+            [("B.txt", "C.txt"), ("A.txt", "B.txt")],
+        )
         self.assertEqual(
             {(entry.source.relative_path, entry.location.relative_path)
              for entry in result.resulting},
@@ -86,6 +92,7 @@ class SimulationTests(unittest.TestCase):
                 result = simulate_move_plan(plan, proposal)
                 self.assertTrue(result.blocked)
                 self.assertIsNone(result.resulting)
+                self.assertEqual(result.steps, ())
                 self.assertTrue(result.blocked_reasons)
                 self.assertTrue(result.original)
 
@@ -95,10 +102,31 @@ class SimulationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not match"):
             simulate_move_plan(wrong, proposal)
 
-    def test_rejects_a_projected_file_without_a_directory_parent(self):
+    def test_blocks_a_projected_file_without_a_directory_parent(self):
         plan, proposal = example(moves=(("A.txt", "Missing/A.txt"),))
-        with self.assertRaisesRegex(ValueError, "missing or non-directory parent"):
-            simulate_move_plan(plan, proposal)
+        result = simulate_move_plan(plan, proposal)
+        self.assertTrue(result.blocked)
+        self.assertIn("parent", result.blocked_reasons[0])
+
+    def test_folder_target_occupied_by_file_can_be_vacated_before_creation(self):
+        plan, proposal = example(
+            moves=(("Loose", "Filed.txt"), ("Other.txt", "Loose/Other.txt")),
+            folders=("Loose",),
+        )
+        result = simulate_move_plan(plan, proposal)
+        self.assertFalse(result.blocked)
+        self.assertEqual(
+            [(step.kind, step.destination.relative_path) for step in result.steps],
+            [("move_file", "Filed.txt"), ("create_folder", "Loose"),
+             ("move_file", "Loose/Other.txt")],
+        )
+
+    def test_move_into_a_folder_replacing_its_source_is_blocked(self):
+        plan, proposal = example(moves=(("Loose", "Loose/file.txt"),), folders=("Loose",))
+        result = simulate_move_plan(plan, proposal)
+        self.assertTrue(result.blocked)
+        self.assertIn("ordering cycle", result.blocked_reasons[0])
+        self.assertEqual(result.steps, ())
 
 
 if __name__ == "__main__":

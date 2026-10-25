@@ -53,12 +53,13 @@ file names or contents, and they do not check the current disk.
 The same view flags destinations occupied in the scanned snapshot, dependencies
 between moves, and cycles such as two files swapping places. It always marks the
 current filesystem as unverified. No action is approved or executed by this check.
-The preview also replays all proposed actions against an in-memory copy of the
-scanned entries and checks that the resulting locations match the proposal.
-Snapshot conflicts and move cycles block a simulation result. A chain of moves
-can have a logical final state even though its execution order remains unresolved.
-The original scan stays intact; this is not a live filesystem simulation or a
-safe sequence for moving files.
+The preview also finds an order for the proposed steps in the scanned snapshot,
+then replays them one at a time against an in-memory copy of the scanned entries.
+Each step requires an empty destination and an existing directory parent. For a
+chain such as A → B and B → C, it shows B → C first. Snapshot conflicts and
+cycles that need an unplanned holding location block the simulation result.
+The resulting locations must match the proposal, and the original scan stays
+intact. The displayed step order is not validated against the current disk.
 
 This first version supports new folders and regular-file placements between
 successfully scanned roots. Unmentioned entries stay in place. Existing folders,
@@ -67,5 +68,5 @@ Nothing is moved, created, deleted, or overwritten by proposal import or preview
 The explicitly chosen proposal JSON is read; scanned file contents remain unopened.
 
 See [the proposal format](docs/AI_PROPOSALS.md) for the contract and limits.
-Current-filesystem conflict checks, safe operation sequencing, simulation,
-execution, and undo remain later work. AI reasons are suggestions, not verified facts.
+Current-filesystem conflict checks, live simulation, execution, and undo remain
+later work. AI reasons are suggestions, not verified facts.

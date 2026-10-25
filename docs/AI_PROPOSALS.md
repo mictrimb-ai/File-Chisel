@@ -89,11 +89,12 @@ unchanged entries, duplicate action targets, destinations that another move must
 vacate first, and move cycles. Accepted JSON proposals already reject final
 destination collisions during import. A snapshot finding describes a known
 planning hazard; no finding does not certify safety. The app does not recheck the
-current filesystem, choose temporary holding locations, or sequence actions.
-It also replays the complete move plan on a copy of the scanned metadata and
-compares the logical final locations with the imported proposal. Conflicts and
-move cycles block a simulation result; ordering dependencies without a cycle can
-still produce a logical final state. This replay leaves the original snapshot
-untouched and does not establish a safe filesystem execution order.
+current filesystem or choose temporary holding locations.
+It orders the complete move plan within a copy of the scanned metadata. Each
+step needs an empty destination and an existing directory parent at that point
+in the copy. It then compares the resulting locations with the imported proposal.
+Conflicts and ordering cycles block a simulation result; a move chain can be
+ordered by vacating its occupied destination first. The original snapshot remains
+untouched. This snapshot-only order is not validated for the current filesystem.
 Proposals are held in memory; keep the returned JSON to import it again after a
 new matching scan. A new scan always clears the displayed proposal.
