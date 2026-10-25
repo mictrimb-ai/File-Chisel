@@ -29,14 +29,14 @@ Status key: ✅ Complete | 📍 Current | ⬜ Not started
 - [x] Summarize file types, sizes, and problem areas
 - [x] Export a privacy-conscious inventory for AI analysis
 
-## Phase 4 — Reorganization Planner 📍
+## Phase 4 — Reorganization Planner ✅
 
 - [x] Generate a proposed folder structure
 - [x] Produce an exact move plan
 - [x] Detect conflicts and unsafe operations in the scanned snapshot
-- [ ] Explain the reasoning behind the proposal
+- [x] Explain the reasoning behind the proposal, distinguishing AI reasons from scanned facts
 
-## Phase 5 — Safe Simulation ⬜
+## Phase 5 — Safe Simulation 📍
 
 - [ ] Simulate the complete move plan
 - [ ] Preserve the original filesystem
