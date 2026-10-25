@@ -5,6 +5,7 @@ from collections import deque
 from file_chisel.move_plan import build_move_plan
 from file_chisel.move_safety import assess_move_plan
 from file_chisel.proposal import FolderProposal, ProposalLocation
+from file_chisel.simulation import simulate_move_plan
 
 
 def _format_reason(reason: str) -> str:
@@ -50,6 +51,7 @@ class ProposalPreview:
         self._children = {}
         plan = build_move_plan(proposal)
         safety = assess_move_plan(plan, proposal)
+        self.simulation = simulate_move_plan(plan, proposal)
         nodes_by_location = {node.location: node for node in proposal.nodes}
         self._proposed_folders = {node.location for node in proposal.nodes if node.source is None}
         findings_by_target = {}
@@ -88,6 +90,18 @@ class ProposalPreview:
             "Current filesystem not verified. This is not a safe execution order.\n"
             "AI reasons are suggestions; scanned file contents were not read.\n"
         )
+        if self.simulation.blocked:
+            safety_header += (
+                "Scanned-snapshot simulation BLOCKED: "
+                + "; ".join(self.simulation.blocked_reasons)
+                + ". No resulting state accepted.\n"
+            )
+        else:
+            safety_header += (
+                f"Scanned-snapshot simulation: {self.simulation.folder_count} folder(s) "
+                f"and {self.simulation.move_count} file move(s) replayed in memory. "
+                "Result matches the proposal; original snapshot preserved.\n"
+            )
         if not self._plan_rows:
             self._plan_rows.append(safety_header + "No folder creations or file moves proposed.\n")
         else:

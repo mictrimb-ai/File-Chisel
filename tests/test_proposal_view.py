@@ -50,6 +50,10 @@ class ProposalPreviewTests(unittest.TestCase):
                       view.plan_text.options["text"])
         self.assertIn("AI reasons are suggestions; scanned file contents were not read.",
                       view.plan_text.options["text"])
+        self.assertIn("Scanned-snapshot simulation: 1 folder(s) and 1 file move(s) "
+                      "replayed in memory.", view.plan_text.options["text"])
+        self.assertIn("Result matches the proposal; original snapshot preserved.",
+                      view.plan_text.options["text"])
         self.assertEqual(view.plan_text.options["state"], "disabled")
         self.assertIn("contents unknown", tree.item(roots["Downloads"], "values")[1])
         self.assertEqual(tree.get_children(roots["Downloads"]), ())
@@ -148,6 +152,7 @@ class ProposalPreviewTests(unittest.TestCase):
         _, view = self.make_preview(build_proposal(json.dumps(document), inventory))
         preview = view.plan_text.options["text"]
         self.assertIn("0 conflicts, 2 ordering dependencies, 1 move cycles", preview)
+        self.assertIn("Scanned-snapshot simulation BLOCKED: 1 move cycle(s)", preview)
         self.assertIn("Current filesystem not verified", preview)
         self.assertEqual(preview.count("Safety cycle:"), 2)
         self.assertEqual(preview.count("Move file:"), 2)
@@ -156,6 +161,7 @@ class ProposalPreviewTests(unittest.TestCase):
         _, view = self.make_preview(build_proposal(json.dumps(document), inventory))
         preview = view.plan_text.options["text"]
         self.assertIn("0 conflicts, 1 ordering dependencies, 0 move cycles", preview)
+        self.assertIn("Result matches the proposal; original snapshot preserved.", preview)
         self.assertNotIn("Safety cycle:", preview)
 
     def test_proposed_actions_are_batched_and_stopped_when_preview_closes(self):

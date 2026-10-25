@@ -53,6 +53,12 @@ file names or contents, and they do not check the current disk.
 The same view flags destinations occupied in the scanned snapshot, dependencies
 between moves, and cycles such as two files swapping places. It always marks the
 current filesystem as unverified. No action is approved or executed by this check.
+The preview also replays all proposed actions against an in-memory copy of the
+scanned entries and checks that the resulting locations match the proposal.
+Snapshot conflicts and move cycles block a simulation result. A chain of moves
+can have a logical final state even though its execution order remains unresolved.
+The original scan stays intact; this is not a live filesystem simulation or a
+safe sequence for moving files.
 
 This first version supports new folders and regular-file placements between
 successfully scanned roots. Unmentioned entries stay in place. Existing folders,
