@@ -165,3 +165,16 @@ Status key: 📍 Active | ✅ Complete | ⛔ Blocked
 - Review: Codex reacted with a thumbs-up; no review findings were reported before merging.
 - Safety boundary: this assessment neither inspects the current filesystem nor finds a safe execution order; live conflict checks, simulation, and execution remain future work.
 - Result: merged into `main`; feature branch deleted locally and on GitHub; the scanned-snapshot safety milestone is complete.
+
+### Parker / ALPHA — Proposal Explanations
+
+- Feature branch: `feature/proposal-explanations`
+- Implementation: ALPHA paired each proposed action's AI reason with facts from the imported scan, including regular-file byte size and whether its destination parent existed in the scanned snapshot or is newly proposed.
+- Changed files: `README.md`, `docs/AI_PROPOSALS.md`, `src/file_chisel/proposal.py`, `src/file_chisel/proposal_view.py`, `tests/test_proposal.py`, `tests/test_proposal_view.py`
+- Feature commit: `5c7bdb7`; merge commit: `72e6445`
+- Pull request: [#23 — Explain AI proposals with scanned metadata context](https://github.com/mictrimb-ai/File-Chisel/pull/23)
+- Validation: 117 tests passed in the implementation workspace, on Parker's macOS feature branch, and again on merged `main` in both environments.
+- Manual validation: Parker imported a Desktop proposal and confirmed that scanned facts, new destination-folder context, and the AI's separate reason were clear in the preview.
+- Review: Codex completed its review of `5c7bdb7` with no findings.
+- Boundary: the app presents AI explanations as unverified suggestions. It does not read scanned file contents, recheck the current filesystem, simulate changes, or execute the proposal.
+- Result: merged into `main`; all four Phase 4 roadmap items are complete. Phase 5 simulation remains future work.
