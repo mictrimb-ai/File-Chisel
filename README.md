@@ -46,6 +46,10 @@ starting another scan, or closing the app clears the proposal.
 The proposal window also lists the exact requested changes: folders to create
 and file source-to-destination moves, with AI-supplied reasons. It omits entries
 that stay in place. The file moves are sorted for review, not safe execution order.
+Each action pairs the AI's reason with facts from the scan, such as a file's
+recorded byte size and whether the destination parent existed in the scan or
+is new in the proposal. Those facts do not verify the AI's interpretation of
+file names or contents, and they do not check the current disk.
 The same view flags destinations occupied in the scanned snapshot, dependencies
 between moves, and cycles such as two files swapping places. It always marks the
 current filesystem as unverified. No action is approved or executed by this check.

@@ -43,6 +43,13 @@ class ProposalPreviewTests(unittest.TestCase):
             view.plan_text.options["text"],
         )
         self.assertIn("AI reason: Collect loose writing.", view.plan_text.options["text"])
+        self.assertIn("Parent context: Documents is present in the scan.", view.plan_text.options["text"])
+        self.assertIn("Scanned fact: regular file, 12 bytes at Documents/report.txt.",
+                      view.plan_text.options["text"])
+        self.assertIn("Destination context: parent Documents/Writing is new in this proposal.",
+                      view.plan_text.options["text"])
+        self.assertIn("AI reasons are suggestions; scanned file contents were not read.",
+                      view.plan_text.options["text"])
         self.assertEqual(view.plan_text.options["state"], "disabled")
         self.assertIn("contents unknown", tree.item(roots["Downloads"], "values")[1])
         self.assertEqual(tree.get_children(roots["Downloads"]), ())
@@ -65,6 +72,7 @@ class ProposalPreviewTests(unittest.TestCase):
             tree.focus(report)
             tree.bindings["<<TreeviewSelect>>"]()
             self.assertIn("Source: Documents/report.txt", view.detail.options["text"])
+            self.assertIn("Scanned fact: regular file, 12 bytes", view.detail.options["text"])
             self.assertIn("Proposed: Documents/Writing/report.txt", view.detail.options["text"])
             self.assertIn("contents are unknown", view.detail.options["text"])
             self.assertEqual(view.detail.options["state"], "disabled")
@@ -72,6 +80,16 @@ class ProposalPreviewTests(unittest.TestCase):
             self.assertEqual(tree.item(notes, "values"), ("File", "Unchanged"))
             tree.open_item(documents["Projects"])
             self.assertEqual(root.callbacks, {})
+
+    def test_explanation_identifies_existing_destination_parent(self):
+        inventory = sample_inventory()
+        document = sample_proposal(inventory)
+        document["folders"] = []
+        document["placements"][0]["destination"]["relative_path"] = "Projects/report.txt"
+        _, view = self.make_preview(build_proposal(json.dumps(document), inventory))
+
+        self.assertIn("Destination context: parent Documents/Projects is present in the scan.",
+                      view.plan_text.options["text"])
 
     def test_batches_wide_folders_and_discards_callbacks_after_close(self):
         nodes = tuple(ProposalNode(

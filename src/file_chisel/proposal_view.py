@@ -13,6 +13,24 @@ def _format_reason(reason: str) -> str:
     return "\n".join(f"  AI reason: {line}" for line in reason.splitlines())
 
 
+def _scan_context(node, proposed_folders) -> str:
+    """Explain the proposal using only the imported scan snapshot."""
+
+    parent = node.location.parent
+    parent_path = parent.root + (f"/{parent.relative_path}" if parent.relative_path else "")
+    parent_status = "new in this proposal" if parent in proposed_folders else "present in the scan"
+    if node.source is None:
+        return f"  Parent context: {parent_path} is {parent_status}.\n"
+    if node.source == node.location:
+        return ""
+    size = f", {node.source_size} bytes" if node.source_size is not None else ""
+    return (
+        f"  Scanned fact: regular file{size} at "
+        f"{node.source.root}/{node.source.relative_path}.\n"
+        f"  Destination context: parent {parent_path} is {parent_status}.\n"
+    )
+
+
 class ProposalPreview:
     """Expand the proposed snapshot in small GUI batches, without filesystem reads."""
 
@@ -32,6 +50,8 @@ class ProposalPreview:
         self._children = {}
         plan = build_move_plan(proposal)
         safety = assess_move_plan(plan, proposal)
+        nodes_by_location = {node.location: node for node in proposal.nodes}
+        self._proposed_folders = {node.location for node in proposal.nodes if node.source is None}
         findings_by_target = {}
         for finding in safety.findings:
             findings_by_target.setdefault(finding.destination, []).append(finding)
@@ -48,6 +68,7 @@ class ProposalPreview:
 
         self._plan_rows = deque(
             f"Create folder: {item.destination.root}/{item.destination.relative_path}\n"
+            f"{_scan_context(nodes_by_location[item.destination], self._proposed_folders)}"
             f"{_format_reason(item.reason)}\n"
             f"{safety_notes(item.destination)}"
             for item in plan.folders
@@ -55,6 +76,7 @@ class ProposalPreview:
         self._plan_rows.extend(
             f"Move file: {item.source.root}/{item.source.relative_path} → "
             f"{item.destination.root}/{item.destination.relative_path}\n"
+            f"{_scan_context(nodes_by_location[item.destination], self._proposed_folders)}"
             f"{_format_reason(item.reason)}\n"
             f"{safety_notes(item.destination, item.source)}"
             for item in plan.moves
@@ -64,6 +86,7 @@ class ProposalPreview:
             f"{safety.dependency_count} ordering dependencies, "
             f"{len(safety.cycles)} move cycles.\n"
             "Current filesystem not verified. This is not a safe execution order.\n"
+            "AI reasons are suggestions; scanned file contents were not read.\n"
         )
         if not self._plan_rows:
             self._plan_rows.append(safety_header + "No folder creations or file moves proposed.\n")
@@ -191,6 +214,7 @@ class ProposalPreview:
             self._add(
                 parent, node.location, node.entry_type, node.status,
                 f"Source: {source}\nProposed: {node.location.root}/{node.location.relative_path}\n"
+                + _scan_context(node, self._proposed_folders)
                 + _format_reason(node.reason),
             )
             self._pending.append((parent, children, placeholder))
