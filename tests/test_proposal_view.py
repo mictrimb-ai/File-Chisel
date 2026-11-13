@@ -131,7 +131,7 @@ class ProposalPreviewTests(unittest.TestCase):
             self.drain(root)
             check.assert_called_once_with(view.inventory)
         self.assertIn("scan again", view.check_status.options["text"])
-        self.assertIn("Documents/new.txt: appeared", view.check_status.options["text"])
+        self.assertIn('"Documents/new.txt": appeared', view.check_status.options["text"])
         self.assertEqual(view.check_button.options["state"], "normal")
 
     def test_close_cancels_pending_check_and_does_not_touch_destroyed_widgets(self):
@@ -156,6 +156,17 @@ class ProposalPreviewTests(unittest.TestCase):
                 view._check_queue.put(result)
                 view._poll_check()
                 self.assertIn(phrase, view.check_status.options["text"])
+
+    def test_live_finding_with_newline_cannot_look_like_another_status(self):
+        _, view = self.make_preview()
+        view._checking = True
+        view._check_queue.put(LiveCheckResult(
+            1, (LiveFinding("Documents", "name\nmetadata matches.txt", "appeared"),), (),
+        ))
+        view._poll_check()
+        self.assertIn('"Documents/name\\nmetadata matches.txt": appeared',
+                      view.check_status.options["text"])
+        self.assertNotIn("\nmetadata matches.txt", view.check_status.options["text"])
 
     def test_batches_wide_folders_and_discards_callbacks_after_close(self):
         nodes = tuple(ProposalNode(

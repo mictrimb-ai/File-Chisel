@@ -1,5 +1,6 @@
 """A separate read-only window for an imported proposal; Tk is loaded on demand."""
 
+import json
 from collections import deque
 from queue import Empty, Queue
 from threading import Thread
@@ -331,7 +332,10 @@ class ProposalPreview:
                 "The saved proposal may be stale; scan again before using it."
             )
             for finding in outcome.findings[:5]:
-                message += f"\n{finding.root}/{finding.relative_path}: {finding.kind.replace('_', ' ')}"
+                location = json.dumps(
+                    f"{finding.root}/{finding.relative_path}", ensure_ascii=False,
+                )
+                message += f"\n{location}: {finding.kind.replace('_', ' ')}"
             if len(outcome.findings) > 5:
                 message += f"\n…and {len(outcome.findings) - 5} more changed entries."
             for name in outcome.unavailable_roots:
