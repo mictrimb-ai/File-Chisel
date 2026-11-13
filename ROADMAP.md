@@ -39,7 +39,7 @@ Status key: ✅ Complete | 📍 Current | ⬜ Not started
 ## Phase 5 — Safe Simulation 📍
 
 - [x] Simulate the complete move plan against the scanned snapshot
-- [ ] Preserve the original filesystem
+- [x] Preserve the original filesystem during simulation and current-folder checks
 - [ ] Compare current and proposed structures
 - [ ] Block plans containing unresolved conflicts
 

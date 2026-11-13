@@ -191,3 +191,16 @@ Status key: 📍 Active | ✅ Complete | ⛔ Blocked
 - Review: Codex completed its review of `7c17d45` with no findings.
 - Boundary: the step order uses an in-memory copy of the scan. Current disk state, permissions, and filesystem rules remain unverified; no files or folders are changed. Cycles needing an unplanned holding step are blocked.
 - Result: merged into `main`; the first Phase 5 roadmap item is complete for the scanned snapshot. Live validation and remaining simulation safeguards are future work.
+
+### Parker / ALPHA — Current Folder Metadata Check
+
+- Feature branch: `feature/live-scan-check`
+- Implementation: ALPHA added a read-only background rescan of successful roots, comparing paths, types, and non-directory size and modification time with the saved inventory; the preview reports differences and roots that cannot be checked.
+- Changed files: `README.md`, `docs/AI_PROPOSALS.md`, `src/file_chisel/app.py`, `src/file_chisel/live_check.py`, `src/file_chisel/proposal_view.py`, `tests/test_app.py`, `tests/test_live_check.py`, `tests/test_proposal_view.py`
+- Feature commits: `26aa9d8` and `eac11c3`; merge commit: `0aa7550`
+- Pull request: [#27 — Check current folders against the saved scan](https://github.com/mictrimb-ai/File-Chisel/pull/27)
+- Validation: 133 tests passed in the implementation workspace, on Parker's macOS feature branch, and again on merged `main` in the implementation workspace and on Parker's Mac.
+- Manual validation: Parker imported a proposal matching a fresh Desktop scan; the check reported that one current root's metadata matched the saved scan at check time.
+- Review: Codex completed its review of `eac11c3` with no findings before merging.
+- Boundary: simulation and metadata checking do not change the original filesystem. A match cannot establish identical contents, permissions, or a lasting disk state; no batch is approved or executed.
+- Result: merged into `main`; feature branch deleted locally and on GitHub; the second Phase 5 roadmap item is complete. Comparing current and proposed structures and blocking unresolved conflicts remain future work.
