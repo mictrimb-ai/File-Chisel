@@ -1,7 +1,12 @@
 """A separate read-only window for an imported proposal; Tk is loaded on demand."""
 
+import json
 from collections import deque
+from queue import Empty, Queue
+from threading import Thread
 
+from file_chisel.inventory import ScanInventory
+from file_chisel.live_check import check_current_folders
 from file_chisel.move_plan import build_move_plan
 from file_chisel.move_safety import assess_move_plan
 from file_chisel.proposal import FolderProposal, ProposalLocation
@@ -40,11 +45,15 @@ class ProposalPreview:
         "file": "File", "directory": "Folder", "symlink": "Symbolic link", "other": "Other",
     }
 
-    def __init__(self, root, proposal: FolderProposal, *, tk_module, ttk_module):
+    def __init__(self, root, proposal: FolderProposal, inventory: ScanInventory, *, tk_module, ttk_module):
         self.root = root
+        self.inventory = inventory
         self._closed = False
         self._after_id = None
         self._plan_after_id = None
+        self._check_after_id = None
+        self._check_queue = Queue()
+        self._checking = False
         self._pending = deque()
         self._unopened = {}
         self._details = {}
@@ -87,7 +96,7 @@ class ProposalPreview:
             f"Scanned-snapshot safety: {safety.conflict_count} conflicts, "
             f"{safety.dependency_count} ordering dependencies, "
             f"{len(safety.cycles)} move cycles.\n"
-            "Current filesystem not verified. The review list is not an execution order.\n"
+            "Current filesystem is not guaranteed by this snapshot. The review list is not an execution order.\n"
             "AI reasons are suggestions; scanned file contents were not read.\n"
         )
         if self.simulation.blocked:
@@ -107,7 +116,7 @@ class ProposalPreview:
         else:
             self._plan_rows[0] = safety_header + self._plan_rows[0]
         if not self.simulation.blocked and self.simulation.steps:
-            self._plan_rows.append("\nScanned-snapshot step order (current disk unverified):\n")
+            self._plan_rows.append("\nScanned-snapshot step order (current disk may differ):\n")
             self._plan_rows.extend(
                 f"{index}. Create folder {step.destination.root}/{step.destination.relative_path}\n"
                 if step.source is None else
@@ -130,7 +139,7 @@ class ProposalPreview:
             row=0, column=0, columnspan=2, sticky="w",
         )
         ttk_module.Label(
-            frame, text="Preview only. No files moved. Current filesystem checks, safe sequencing, and simulation are still required.",
+            frame, text="Preview only. No files moved. Snapshot steps are simulated; current folders can be checked separately. Execution remains unavailable.",
             wraplength=700, justify="left",
         ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 8))
         summary = ttk_module.Frame(frame)
@@ -184,6 +193,16 @@ class ProposalPreview:
         self.plan_text.grid(row=0, column=0, sticky="ew")
         plan_scroll.grid(row=0, column=1, sticky="ns")
         self._insert_plan_batch()
+
+        self.check_button = ttk_module.Button(
+            frame, text="Check current folders", command=self.check_current_folders,
+        )
+        self.check_button.grid(row=8, column=0, sticky="w", pady=(10, 0))
+        self.check_status = ttk_module.Label(frame, wraplength=700, justify="left")
+        self.check_status.grid(row=9, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        self.check_status.configure(
+            text="Current disk not checked. This read-only check can detect changes since the scan."
+        )
 
         self.tree.bind("<<TreeviewOpen>>", self._opened)
         self.tree.bind("<<TreeviewSelect>>", self._selected)
@@ -265,6 +284,64 @@ class ProposalPreview:
         if self._plan_rows:
             self._plan_after_id = self.root.after(1, self._insert_plan_batch)
 
+    def check_current_folders(self):
+        if self._closed or self._checking:
+            return
+        self._checking = True
+        self.check_button.configure(state="disabled")
+        self.check_status.configure(text="Checking current folders without opening file contents…")
+
+        def work():
+            try:
+                outcome = check_current_folders(self.inventory)
+            except Exception as error:
+                outcome = error
+            self._check_queue.put(outcome)
+
+        try:
+            Thread(target=work, daemon=True).start()
+        except RuntimeError:
+            self._checking = False
+            self.check_button.configure(state="normal")
+            self.check_status.configure(text="Check could not start. Try again.")
+            return
+        self._check_after_id = self.root.after(50, self._poll_check)
+
+    def _poll_check(self):
+        if self._closed:
+            return
+        self._check_after_id = None
+        try:
+            outcome = self._check_queue.get_nowait()
+        except Empty:
+            self._check_after_id = self.root.after(50, self._poll_check)
+            return
+        self._checking = False
+        self.check_button.configure(state="normal")
+        if isinstance(outcome, Exception):
+            message = "Check could not finish; current filesystem remains unverified."
+        elif outcome.matches:
+            message = (
+                f"Checked {outcome.checked_roots} current folder(s): metadata matches the saved scan "
+                "at check time. The disk may change afterward; file contents were not checked."
+            )
+        else:
+            message = (
+                f"Current folders differ or could not be checked: {len(outcome.findings)} changed "
+                f"entry(s), {len(outcome.unavailable_roots)} unavailable root(s). "
+                "The saved proposal may be stale; scan again before using it."
+            )
+            for finding in outcome.findings[:5]:
+                location = json.dumps(
+                    f"{finding.root}/{finding.relative_path}", ensure_ascii=False,
+                )
+                message += f"\n{location}: {finding.kind.replace('_', ' ')}"
+            if len(outcome.findings) > 5:
+                message += f"\n…and {len(outcome.findings) - 5} more changed entries."
+            for name in outcome.unavailable_roots:
+                message += f"\n{name}: could not scan"
+        self.check_status.configure(text=message)
+
     def close(self):
         if self._closed:
             return
@@ -275,18 +352,21 @@ class ProposalPreview:
         if self._plan_after_id is not None:
             self.root.after_cancel(self._plan_after_id)
             self._plan_after_id = None
+        if self._check_after_id is not None:
+            self.root.after_cancel(self._check_after_id)
+            self._check_after_id = None
         self._pending.clear()
         self._plan_rows.clear()
         self.root.destroy()
 
 
-def open_proposal_preview(parent, proposal: FolderProposal) -> ProposalPreview:
+def open_proposal_preview(parent, proposal: FolderProposal, inventory: ScanInventory) -> ProposalPreview:
     import tkinter as tk
     from tkinter import ttk
 
     root = tk.Toplevel(parent)
     try:
-        return ProposalPreview(root, proposal, tk_module=tk, ttk_module=ttk)
+        return ProposalPreview(root, proposal, inventory, tk_module=tk, ttk_module=ttk)
     except Exception:
         root.destroy()
         raise

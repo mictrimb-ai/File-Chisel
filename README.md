@@ -61,6 +61,14 @@ cycles that need an unplanned holding location block the simulation result.
 The resulting locations must match the proposal, and the original scan stays
 intact. The displayed step order is not validated against the current disk.
 
+In the proposal preview, **Check current folders** rescans successfully scanned
+roots in the background and compares entry paths, types, and file metadata with
+the saved scan. It does not open file contents or write anything. New, missing,
+or changed entries and roots that cannot be scanned are reported; failed roots
+were never known and are not checked. A match only means the available metadata
+matched at check time. Changes with identical metadata can be missed, and the
+disk may change again afterward. This check does not approve or execute the plan.
+
 This first version supports new folders and regular-file placements between
 successfully scanned roots. Unmentioned entries stay in place. Existing folders,
 symbolic links, and other entry types are retained, and failed roots remain unknown.
@@ -68,5 +76,5 @@ Nothing is moved, created, deleted, or overwritten by proposal import or preview
 The explicitly chosen proposal JSON is read; scanned file contents remain unopened.
 
 See [the proposal format](docs/AI_PROPOSALS.md) for the contract and limits.
-Current-filesystem conflict checks, live simulation, execution, and undo remain
-later work. AI reasons are suggestions, not verified facts.
+Execution-time validation, live simulation, execution, and undo remain later
+work. AI reasons are suggestions, not verified facts.
