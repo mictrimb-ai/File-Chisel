@@ -424,7 +424,7 @@ class ApplicationTests(unittest.TestCase):
             view.import_button.options["command"]()
             first = self.controller.proposal
             self.assertIsNotNone(first)
-            factory.assert_called_once_with(root, first)
+            factory.assert_called_once_with(root, first, snapshot)
             self.assertIn("No files moved", self.controller.status)
             document["summary"] = "A revised AI explanation."
             path.write_text(json.dumps(document), encoding="utf-8")

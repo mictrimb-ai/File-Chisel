@@ -449,7 +449,9 @@ class FolderSelectionView:
         else:
             self._close_proposal_preview()
             try:
-                self._proposal_preview = self._preview_factory(self.root, self.controller.proposal)
+                self._proposal_preview = self._preview_factory(
+                    self.root, self.controller.proposal, self.controller.inventory,
+                )
             except Exception:
                 self.controller.proposal = None
                 self.controller.status = "The proposal window could not open. Try importing it again."

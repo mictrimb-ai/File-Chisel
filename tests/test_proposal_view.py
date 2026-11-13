@@ -9,6 +9,7 @@ from unittest import mock
 
 from file_chisel.proposal import FolderProposal, ProposalLocation, ProposalNode, build_proposal
 from file_chisel.proposal_view import ProposalPreview
+from file_chisel.live_check import LiveCheckResult, LiveFinding
 from tests.test_app import FAKE_TK, FAKE_TTK, FakeRoot
 from tests.test_proposal import sample_inventory, sample_proposal
 
@@ -18,7 +19,7 @@ class ProposalPreviewTests(unittest.TestCase):
         inventory = sample_inventory()
         proposal = proposal or build_proposal(json.dumps(sample_proposal(inventory)), inventory)
         root = FakeRoot()
-        preview = ProposalPreview(root, proposal, tk_module=FAKE_TK, ttk_module=FAKE_TTK)
+        preview = ProposalPreview(root, proposal, inventory, tk_module=FAKE_TK, ttk_module=FAKE_TTK)
         self.addCleanup(preview.close)
         return root, preview
 
@@ -52,6 +53,7 @@ class ProposalPreviewTests(unittest.TestCase):
                       view.plan_text.options["text"])
         self.assertIn("Scanned-snapshot simulation: 1 folder(s) and 1 file move(s) "
                       "replayed in memory in order.", view.plan_text.options["text"])
+        self.assertIn("Current disk not checked", view.check_status.options["text"])
         self.assertIn("Result matches the proposal; original snapshot preserved.",
                       view.plan_text.options["text"])
         self.drain(root)
@@ -98,6 +100,62 @@ class ProposalPreviewTests(unittest.TestCase):
 
         self.assertIn("Destination context: parent Documents/Projects is present in the scan.",
                       view.plan_text.options["text"])
+
+    def test_current_folder_check_runs_off_gui_thread_and_reports_drift(self):
+        root, view = self.make_preview()
+        workers = []
+
+        class ControlledThread:
+            def __init__(self, *, target, daemon):
+                self.target = target
+                self.daemon = daemon
+                workers.append(self)
+
+            def start(self):
+                pass
+
+            def finish(self):
+                self.target()
+
+        result = LiveCheckResult(2, (LiveFinding("Documents", "new.txt", "appeared"),), ())
+        with mock.patch("file_chisel.proposal_view.Thread", ControlledThread), \
+                mock.patch("file_chisel.proposal_view.check_current_folders", return_value=result) as check:
+            view.check_button.options["command"]()
+            self.assertEqual(view.check_button.options["state"], "disabled")
+            check.assert_not_called()
+            view.check_current_folders()
+            self.assertEqual(len(workers), 1)
+            root.fire_next()  # The worker has not produced its result yet.
+            self.assertIn("Checking current folders", view.check_status.options["text"])
+            workers[0].finish()
+            self.drain(root)
+            check.assert_called_once_with(view.inventory)
+        self.assertIn("scan again", view.check_status.options["text"])
+        self.assertIn("Documents/new.txt: appeared", view.check_status.options["text"])
+        self.assertEqual(view.check_button.options["state"], "normal")
+
+    def test_close_cancels_pending_check_and_does_not_touch_destroyed_widgets(self):
+        root, view = self.make_preview()
+        with mock.patch("file_chisel.proposal_view.Thread") as thread:
+            view.check_current_folders()
+            thread.return_value.start.assert_called_once()
+        callback = next(value for value in root.callbacks.values() if value == view._poll_check)
+        view.close()
+        self.assertEqual(root.callbacks, {})
+        callback()
+
+    def test_matching_and_failed_live_checks_are_explicit(self):
+        for result, phrase in (
+            (LiveCheckResult(2, (), ()), "metadata matches the saved scan at check time"),
+            (LiveCheckResult(2, (), ("Desktop",)), "could not be checked"),
+            (RuntimeError("unexpected"), "current filesystem remains unverified"),
+        ):
+            with self.subTest(result=result):
+                root, view = self.make_preview()
+                view._checking = True
+                view._check_queue.put(result)
+                view._poll_check()
+                self.assertIn(phrase, view.check_status.options["text"])
 
     def test_batches_wide_folders_and_discards_callbacks_after_close(self):
         nodes = tuple(ProposalNode(
@@ -158,7 +216,7 @@ class ProposalPreviewTests(unittest.TestCase):
         self.assertIn("0 conflicts, 2 ordering dependencies, 1 move cycles", preview)
         self.assertIn("Scanned-snapshot simulation BLOCKED: 1 move cycle(s)", preview)
         self.assertNotIn("Scanned-snapshot step order", preview)
-        self.assertIn("Current filesystem not verified", preview)
+        self.assertIn("Current filesystem is not guaranteed by this snapshot", preview)
         self.assertEqual(preview.count("Safety cycle:"), 2)
         self.assertEqual(preview.count("Move file:"), 2)
 
